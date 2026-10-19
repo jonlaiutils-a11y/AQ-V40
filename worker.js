@@ -29,16 +29,21 @@ async function quote(codes){
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 export default {async fetch(req,env){const u=new URL(req.url);
- if(u.pathname==='/api/health')return json({ok:true,version:'AQ V40 P2 Engine Test',source,scope:'扩展观察池，非全A股',timestamp:new Date().toISOString()});
+ if(u.pathname==='/api/health')return json({ok:true,version:'AQ V40 P3 Engine Research',source,scope:'扩展观察池，非全A股',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/diagnostic'||u.pathname==='/api/scan'){
   try{
    const chunks=[];for(let i=0;i<CODES.length;i+=20)chunks.push(CODES.slice(i,i+20));
    const results=[];for(let i=0;i<chunks.length;i+=6){results.push(...await Promise.allSettled(chunks.slice(i,i+6).map(quote)));}const all=results.flatMap(r=>r.status==='fulfilled'?r.value:[]);
    const errors=results.filter(r=>r.status==='rejected').map(r=>String(r.reason));
-   const items=all.map(x=>{const momentum=Math.max(0,Math.min(100,Math.round(45+x.pct*5+x.position*25-(x.pct>8?12:0)-(x.amp>10?10:0))));const quality=Math.round(.45*x.startScore+.35*x.relayScore+.2*momentum);const chase=x.pct>8||x.position<.35||x.amp>12;x.aqScore=quality;x.grade=quality>=82&&!chase?'S':quality>=73&&!chase?'A':quality>=60?'B':quality>=45?'C':'D';x.risk=[...x.risk,...(x.pct>6&&x.position>.85?['临近高位，等待回踩']:[])];x.action=chase?'不买·风险过滤':quality>=73?'强势备选·等待买点':'观察·未确认';return x}).sort((a,b)=>b.aqScore-a.aqScore).slice(0,80);
+   const items=all.map(x=>{const momentum=Math.max(0,Math.min(100,Math.round(45+x.pct*5+x.position*25-(x.pct>8?12:0)-(x.amp>10?10:0))));const quality=Math.round(.45*x.startScore+.35*x.relayScore+.2*momentum);const chase=x.pct>8||x.position<.35||x.amp>12;x.aqScore=quality;x.grade=quality>=82&&!chase?'S':quality>=73&&!chase?'A':quality>=60?'B':quality>=45?'C':'D';x.risk=[...x.risk,...(x.pct>6&&x.position>.85?['临近高位，等待回踩']:[])];x.action=chase?'不买·风险过滤':quality>=73?'强势备选·等待买点':'观察·未确认';return x}).sort((a,b)=>b.aqScore-a.aqScore);
+   const top80=items.slice(0,80);
+   const top3=items.filter(x=>x.aqScore>=70&&x.relayScore>=60&&x.pct>=1.5&&x.pct<=8&&x.position>=.55&&x.amp<=10).slice(0,3).map(x=>({...x,signal:'强势观察·等待分时确认'}));
+   const afternoon=items.filter(x=>x.pct>=3&&x.pct<9.5&&x.position>=.8&&x.amp<=11&&x.relayScore>=60).sort((a,b)=>(b.position-a.position)*40+(b.pct-a.pct)).slice(0,5).map(x=>({...x,signal:'冲板候选·未验证封板条件'}));
    const ok=items.length>0;const allFresh=all.every(x=>!!x.quoteTime);
-   if(u.pathname==='/api/diagnostic')return json({ok,source,requested:CODES.length,received:all.length,errors,first:items.slice(0,3),timestamp:new Date().toISOString()},ok?200:503);
-   return json({timestamp:new Date().toISOString(),source,totalExpected:CODES.length,received:all.length,complete:errors.length===0&&all.length===CODES.length,failedPages:errors.length,mode:'扩展股票池筛选测试（非全市场扫描）',note:'扩展池非全市场；评分未经回测；无分时盘口验证，不提供买入指令。',errors,items},ok?200:503);
+   const quoteTimes=all.map(x=>x.quoteTime).filter(Boolean);
+   const latestQuoteTime=quoteTimes.sort().at(-1)||null;
+   if(u.pathname==='/api/diagnostic')return json({ok,source,requested:CODES.length,received:all.length,errors,first:top3,timestamp:new Date().toISOString()},ok?200:503);
+   return json({timestamp:new Date().toISOString(),source,totalExpected:CODES.length,received:all.length,complete:errors.length===0&&all.length===CODES.length,failedPages:errors.length,mode:'P3双雷达观察测试（332预设池，非全市场）',note:'扩展池非全市场；评分未经回测；无分时盘口验证，不提供买入指令。',errors,latestQuoteTime,top3,afternoon,items:top80},ok?200:503);
   }catch(e){return json({error:'腾讯行情获取失败',detail:String(e.message),timestamp:new Date().toISOString()},503)}
  }
  return env.ASSETS.fetch(req);
