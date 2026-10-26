@@ -41,7 +41,8 @@ async function quote(codes,allowStale=false){
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 export default {async fetch(req,env){const u=new URL(req.url);
- if(u.pathname==='/api/health')return json({ok:true,version:'AQ V41.8 Focus & Amount Sampling Beta',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+ if(u.pathname==='/api/health')return json({ok:true,version:'AQ V41.9 Cloud L2 Adapter Phase 1',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+ if(u.pathname==='/api/cr/status')return json({version:'41.9-phase1',ready:false,provider:null,crStatus:'待授权数据；未生成分数',historyDb:!!env.DB,adapter:'vendor-neutral',note:'仅建立接口状态与数据契约；不接受客户端伪造的主动买卖数据',serverTime:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
  if(u.pathname==='/api/segment'){
   const index=Number(u.searchParams.get('i'));
@@ -69,7 +70,7 @@ export default {async fetch(req,env){const u=new URL(req.url);
   const result=await Promise.allSettled(chunks.map(c=>quote(c,true)));const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
- if(u.pathname==='/api/diagnostics')return json({version:'41.7',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',persistence:!!env.DB,quoteSource:source,backgroundScan:false});
+ if(u.pathname==='/api/diagnostics')return json({version:'41.9',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',persistence:!!env.DB,quoteSource:source,backgroundScan:false});
  if(u.pathname==='/api/history'&&req.method==='GET'){
   if(!env.DB)return json({enabled:false,error:'尚未配置D1数据库，无法读取持久化历史'},503);
   const day=u.searchParams.get('day');if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return json({error:'day须为YYYY-MM-DD'},400);
