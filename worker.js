@@ -7,8 +7,8 @@ const SEGMENT_SIZE=400;
 function scoreItem(x){const momentum=Math.max(0,Math.min(100,Math.round(45+x.pct*5+x.position*25-(x.pct>8?12:0)-(x.amp>10?10:0))));const quality=Math.round(.45*x.startScore+.35*x.relayScore+.2*momentum);const chase=x.pct>8||x.position<.35||x.amp>12;x.aqScore=quality;x.grade=quality>=82&&!chase?'S':quality>=73&&!chase?'A':quality>=60?'B':quality>=45?'C':'D';x.risk=[...x.risk,...(x.pct>6&&x.position>.85?['临近高位，等待回踩']:[])];x.action=chase?'不买·风险过滤':quality>=73?'强势备选·等待买点':'观察·未确认';return x;}
 const source='腾讯公开行情接口（非官方，可能限流或失效）';
 const num=v=>{if(v===undefined||v===null||v===''||v==='-')return null;const x=Number(v);return Number.isFinite(x)?x:null};
-const market=code=>/^(6|9)/.test(code)?'sh':'sz';
-async function quote(codes){
+const market=code=>/^92/.test(code)?'bj':/^(6|9)/.test(code)?'sh':'sz';
+async function quote(codes,allowStale=false){
  const symbols=codes.map(c=>market(c)+c).join(',');
  const url='https://qt.gtimg.cn/q='+symbols;
  const r=await fetch(url,{signal:AbortSignal.timeout(7000),headers:{'Accept':'*/*'}});
@@ -27,7 +27,7 @@ async function quote(codes){
    const qt=String(f[30]||'');
    if(!/^20\d{12}$/.test(qt))continue;
    const quoteDate=qt.slice(0,8),todayCN=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/-/g,'');
-   if(quoteDate!==todayCN)continue;
+   if(quoteDate!==todayCN&&!allowStale)continue;
    const pct=num(f[32])??((price/prev-1)*100),high=num(f[33])??price,low=num(f[34])??price;
    const turn=num(f[38]),amp=num(f[43]);
    const position=Math.max(0,Math.min(1,(price-low)/Math.max(.001,high-low)));
@@ -41,7 +41,7 @@ async function quote(codes){
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 export default {async fetch(req,env){const u=new URL(req.url);
- if(u.pathname==='/api/health')return json({ok:true,version:'AQ V41.4 Scan Continuity Beta',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+ if(u.pathname==='/api/health')return json({ok:true,version:'AQ V41.8 Focus & Amount Sampling Beta',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
  if(u.pathname==='/api/segment'){
   const index=Number(u.searchParams.get('i'));
@@ -49,9 +49,16 @@ export default {async fetch(req,env){const u=new URL(req.url);
   if(!Number.isInteger(index)||index<0||index>=segments)return json({error:'无效分段'},400);
   const codes=UNIVERSE.slice(index*SEGMENT_SIZE,(index+1)*SEGMENT_SIZE);
   const chunks=[];for(let i=0;i<codes.length;i+=40)chunks.push(codes.slice(i,i+40));
-  const started=Date.now();const responses=await Promise.allSettled(chunks.map(quote));
-  const all=responses.flatMap(r=>r.status==='fulfilled'?r.value:[]);
-  const errors=responses.filter(r=>r.status==='rejected').map(r=>String(r.reason));
+  const started=Date.now(),all=[],errors=[];
+  // Throttle public-source requests and retry only failed chunks.
+  for(let i=0;i<chunks.length;i+=3){
+   const batch=chunks.slice(i,i+3);
+   const results=await Promise.allSettled(batch.map(c=>quote(c)));
+   for(let j=0;j<results.length;j++){
+    if(results[j].status==='fulfilled'){all.push(...results[j].value);continue;}
+    try{all.push(...await quote(batch[j]));}catch(e){errors.push('batch '+(i+j)+': '+String(e));}
+   }
+  }
   const items=all.map(scoreItem);
   return json({index,segments,requested:codes.length,received:items.length,failedBatches:errors.length,errors,elapsedMs:Date.now()-started,items,timestamp:new Date().toISOString(),source},errors.length?206:200);
  }
@@ -59,10 +66,10 @@ export default {async fetch(req,env){const u=new URL(req.url);
   const codes=[...new Set((u.searchParams.get('codes')||'').split(',').filter(c=>/^\d{6}$/.test(c)))].slice(0,50);
   if(!codes.length)return json({error:'请提供1—50个6位代码'},400);
   const chunks=[];for(let i=0;i<codes.length;i+=25)chunks.push(codes.slice(i,i+25));
-  const result=await Promise.allSettled(chunks.map(quote));const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
+  const result=await Promise.allSettled(chunks.map(c=>quote(c,true)));const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
- if(u.pathname==='/api/diagnostics')return json({version:'41.4',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',persistence:!!env.DB,quoteSource:source,backgroundScan:false});
+ if(u.pathname==='/api/diagnostics')return json({version:'41.7',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',persistence:!!env.DB,quoteSource:source,backgroundScan:false});
  if(u.pathname==='/api/history'&&req.method==='GET'){
   if(!env.DB)return json({enabled:false,error:'尚未配置D1数据库，无法读取持久化历史'},503);
   const day=u.searchParams.get('day');if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return json({error:'day须为YYYY-MM-DD'},400);
