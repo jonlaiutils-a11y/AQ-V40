@@ -41,7 +41,7 @@ async function quote(codes){
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 export default {async fetch(req,env){const u=new URL(req.url);
- if(u.pathname==='/api/health')return json({ok:true,version:'AQ V41.0 Verified Data Gate',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+ if(u.pathname==='/api/health')return json({ok:true,version:'AQ V41.2 Quote Snapshot Beta',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
  if(u.pathname==='/api/segment'){
   const index=Number(u.searchParams.get('i'));
@@ -62,7 +62,7 @@ export default {async fetch(req,env){const u=new URL(req.url);
   const result=await Promise.allSettled(chunks.map(quote));const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
- if(u.pathname==='/api/diagnostics')return json({version:'41.0',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',persistence:!!env.DB,quoteSource:source,backgroundScan:false});
+ if(u.pathname==='/api/diagnostics')return json({version:'41.2',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',persistence:!!env.DB,quoteSource:source,backgroundScan:false});
  if(u.pathname==='/api/history'&&req.method==='GET'){
   if(!env.DB)return json({enabled:false,error:'尚未配置D1数据库，无法读取持久化历史'},503);
   const day=u.searchParams.get('day');if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return json({error:'day须为YYYY-MM-DD'},400);
