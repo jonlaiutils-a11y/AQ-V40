@@ -41,7 +41,7 @@ async function quote(codes,allowStale=false){
 }
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
 export default {async fetch(req,env){const u=new URL(req.url);
- if(u.pathname==='/api/health')return json({ok:true,version:'AQ V41.9 Cloud L2 Adapter Phase 1',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+ if(u.pathname==='/api/health')return json({ok:true,version:'AQ V42.0 Snapshot Review',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/cr/status')return json({version:'41.9-phase1',ready:false,provider:null,crStatus:'待授权数据；未生成分数',historyDb:!!env.DB,adapter:'vendor-neutral',note:'仅建立接口状态与数据契约；不接受客户端伪造的主动买卖数据',serverTime:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
  if(u.pathname==='/api/segment'){
@@ -92,6 +92,37 @@ export default {async fetch(req,env){const u=new URL(req.url);
   if(!env.DB)return json({enabled:false,error:'未配置D1'},503);
   const day=u.searchParams.get('day');if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return json({error:'day格式错误'},400);
   try{const r=await env.DB.prepare('SELECT e.*,h.last_price,h.peak_price,h.trough_price,h.best_rank,h.last_seen FROM aq_top3_events e LEFT JOIN aq_rank_history h ON e.day=h.day AND e.code=h.code WHERE e.day=? ORDER BY e.first_top3_at').bind(day).all();return json({day,items:r.results,priceNote:'报价快照非官方收盘价；无后续交易日价格不计算收益'});}catch(e){return json({error:'数据库需执行V41 schema.sql',detail:String(e)},503)}
+ }
+
+ // V42: server-generated timestamps; first entry immutable, subsequent quote snapshots are explicitly not closing prices.
+ if(u.pathname==='/api/v42/signals'&&req.method==='POST'){
+  if(!env.DB)return json({error:'D1未绑定'},503);
+  const body=await req.json().catch(()=>null);
+  if(!body||!Array.isArray(body.items)||body.items.length>3)return json({error:'TOP3格式错误'},400);
+  const now=new Date(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+  const rows=body.items.filter(x=>/^\d{6}$/.test(x.code||'')&&Number.isFinite(x.price)&&x.price>0&&Number.isInteger(x.rank)&&x.rank>=1&&x.rank<=3&&/^20\d{12}$/.test(String(x.quoteTime||''))&&String(x.quoteTime).slice(0,8)===day.replace(/-/g,''));
+  try{
+   if(rows.length)await env.DB.batch(rows.map(x=>env.DB.prepare(`INSERT INTO aq_v42_signals(trade_date,code,name,first_rank,first_price,first_quote_time,first_seen_at,start_score,relay_score,aq_score,source,mode,last_price,last_quote_date,last_quote_time,last_seen_at,outcome_status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(trade_date,code,mode) DO UPDATE SET last_price=excluded.last_price,last_quote_date=excluded.last_quote_date,last_quote_time=excluded.last_quote_time,last_seen_at=excluded.last_seen_at,first_rank=MIN(aq_v42_signals.first_rank,excluded.first_rank)`).bind(day,x.code,String(x.name||'').slice(0,40),x.rank,x.price,String(x.quoteTime),now.toISOString(),x.startScore??null,x.relayScore??null,x.aqScore??null,'Tencent-public','AUTO_TOP3',x.price,day,String(x.quoteTime),now.toISOString(),'当日跟踪')));
+   return json({saved:rows.length,day,notice:'仅页面打开且完成扫描时写入；不是后台定时任务'});
+  }catch(e){return json({error:'请先执行V42_migration.sql：'+String(e)},503)}
+ }
+ if(u.pathname==='/api/v42/review'&&req.method==='GET'){
+  if(!env.DB)return json({error:'D1未绑定'},503);
+  const days=Math.min(30,Math.max(1,Number(u.searchParams.get('days'))||7));
+  const from=new Date(Date.now()-(days-1)*86400000).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'});
+  try{const d=await env.DB.prepare('SELECT trade_date,code,name,first_rank,first_price,first_quote_time,last_price,last_quote_date,last_quote_time,outcome_status FROM aq_v42_signals WHERE trade_date>=? ORDER BY trade_date DESC,first_rank ASC LIMIT 100').bind(from).all();return json({items:d.results,days,source:'snapshot-only'});}catch(e){return json({error:'请先执行V42_migration.sql：'+String(e)},503)}
+ }
+ if(u.pathname==='/api/v42/refresh'&&req.method==='POST'){
+  if(!env.DB)return json({error:'D1未绑定'},503);
+  try{
+   const d=await env.DB.prepare('SELECT DISTINCT code FROM aq_v42_signals WHERE trade_date>=? LIMIT 90').bind(new Date(Date.now()-8*86400000).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})).all();
+   const codes=d.results.map(x=>x.code),now=new Date(),day=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(now),updates=[];
+   for(let i=0;i<codes.length;i+=25){try{updates.push(...await quote(codes.slice(i,i+25),true))}catch(e){/* leave prior snapshots unchanged */}}
+   const good=updates.filter(x=>/^20\d{12}$/.test(x.quoteTime||'')&&x.quoteTime.slice(0,8)>=day.replace(/-/g,''));
+   // Refresh only with today's quote, never silently use yesterday's snapshot as today's price.
+   if(good.length)await env.DB.batch(good.map(x=>env.DB.prepare(`UPDATE aq_v42_signals SET last_price=?,last_quote_date=?,last_quote_time=?,last_seen_at=?,outcome_status=CASE WHEN trade_date<? THEN '后续交易日快照（非收盘价）' ELSE '当日跟踪' END WHERE code=? AND (last_quote_time IS NULL OR last_quote_time<=?)`).bind(x.price,day,x.quoteTime,now.toISOString(),day,x.code,x.quoteTime)));
+   return json({updated:good.length,skipped:codes.length-good.length,note:'仅更新今日有效报价；历史日期的收盘价、次日/第三日收益未被验证'});
+  }catch(e){return json({error:'追踪更新失败：'+String(e)},503)}
  }
  if(u.pathname==='/api/scan')return json({error:'P4已改为分段扫描，请使用新版页面。',endpoint:'/api/universe'},409);
  return env.ASSETS.fetch(req);
