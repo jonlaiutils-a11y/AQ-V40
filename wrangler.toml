@@ -6,3 +6,8 @@ compatibility_date = "2026-09-01"
 directory = "./public"
 binding = "ASSETS"
 run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "aq-history"
+database_id = "1dbe83ca-9898-4585-86d3-b076ebc0b9c8"
