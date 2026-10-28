@@ -43,12 +43,29 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control
 export default {async fetch(req,env){const u=new URL(req.url);
  if(u.pathname==='/api/db/status'){
    if(!env.DB)return json({bound:false,v42Ready:false,legacyReady:false});
-   const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('aq_v42_signals','aq_rank_history','aq_top3_events','aq_signals')").all().catch(()=>({results:[]}));
+   const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('aq_v42_signals','aq_rank_history','aq_top3_events','aq_signals','aq_early_events')").all().catch(()=>({results:[]}));
    const names=(tables.results||[]).map(x=>x.name);
-   return json({bound:true,v42Ready:names.includes('aq_v42_signals'),legacyReady:names.includes('aq_rank_history')&&names.includes('aq_top3_events'),tables:names});
+   return json({bound:true,v42Ready:names.includes('aq_v42_signals'),legacyReady:names.includes('aq_rank_history')&&names.includes('aq_top3_events'),earlyReady:names.includes('aq_early_events'),tables:names});
   }
-  if(u.pathname==='/api/sector/status')return json({ready:false,reason:'尚无已验证的行业/概念映射与实时板块报价源；不伪造数据'});
-  if(u.pathname==='/api/health')return json({ok:true,version:'AQ V42.0 Snapshot Review',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+  if(u.pathname==='/api/early/events'&&req.method==='POST'){
+  if(!env.DB)return json({error:'D1未绑定'},503);
+  let body=await req.json().catch(()=>null);
+  if(!body||!Array.isArray(body.items)||body.items.length>50)return json({error:'信号格式错误'},400);
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const good=body.items.filter(x=>/^\d{6}$/.test(x.code||'')&&Number.isFinite(x.price)&&x.price>0&&['PREWARN','CONFIRM','INVALID','EXPIRED'].includes(x.kind)&&/^20\d{12}$/.test(x.quoteTime||'')&&x.quoteTime.slice(0,8)===today.replace(/-/g,''));
+  try{
+   if(good.length)await env.DB.batch(good.map(x=>env.DB.prepare(`INSERT INTO aq_early_events(trade_date,code,kind,name,first_quote_time,first_price,first_seen_at,first_score,reason,last_quote_time,last_price,last_seen_at,samples) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(trade_date,code,kind) DO UPDATE SET last_quote_time=excluded.last_quote_time,last_price=excluded.last_price,last_seen_at=excluded.last_seen_at,samples=aq_early_events.samples+1`).bind(today,x.code,x.kind,String(x.name||'').slice(0,40),x.quoteTime,x.price,new Date().toISOString(),Number.isFinite(x.startScore)?x.startScore:null,String(x.reason||'').slice(0,120),x.quoteTime,x.price,new Date().toISOString(),1)));
+   return json({saved:good.length,day:today});
+  }catch(e){return json({error:'早期信号表不可用，请执行 migration_v422.sql',detail:String(e)},503)}
+ }
+ if(u.pathname==='/api/early/events'&&req.method==='GET'){
+  if(!env.DB)return json({error:'D1未绑定'},503);
+  const day=u.searchParams.get('day');if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return json({error:'day格式错误'},400);
+  try{const d=await env.DB.prepare('SELECT * FROM aq_early_events WHERE trade_date=? ORDER BY first_quote_time ASC LIMIT 500').bind(day).all();return json({items:d.results,day});}
+  catch(e){return json({error:'早期信号表不可用，请执行 migration_v422.sql',detail:String(e)},503)}
+ }
+ if(u.pathname==='/api/sector/status')return json({ready:false,reason:'尚无已验证的行业/概念映射与实时板块报价源；不伪造数据'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'AQ V42.2 Early Signal Audit',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/cr/status')return json({version:'41.9-phase1',ready:false,provider:null,crStatus:'待授权数据；未生成分数',historyDb:!!env.DB,adapter:'vendor-neutral',note:'仅建立接口状态与数据契约；不接受客户端伪造的主动买卖数据',serverTime:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
  if(u.pathname==='/api/segment'){
