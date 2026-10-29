@@ -65,7 +65,7 @@ export default {async fetch(req,env){const u=new URL(req.url);
   catch(e){return json({error:'早期信号表不可用，请执行 migration_v422.sql',detail:String(e)},503)}
  }
  if(u.pathname==='/api/sector/status')return json({ready:false,reason:'尚无已验证的行业/概念映射与实时板块报价源；不伪造数据'});
-  if(u.pathname==='/api/health')return json({ok:true,version:'AQ V42.2 Early Signal Audit',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+  if(u.pathname==='/api/health')return json({ok:true,version:'AQ V42.3 Strong Start Audit',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/cr/status')return json({version:'41.9-phase1',ready:false,provider:null,crStatus:'待授权数据；未生成分数',historyDb:!!env.DB,adapter:'vendor-neutral',note:'仅建立接口状态与数据契约；不接受客户端伪造的主动买卖数据',serverTime:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
  if(u.pathname==='/api/segment'){
