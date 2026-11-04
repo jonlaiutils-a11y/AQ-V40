@@ -42,20 +42,32 @@ async function quote(codes,allowStale=false){
    // Neither field is used for turnover scoring until independently verified.
    const turn=null,amp=num(f[43]);
    const open=num(f[5]);
-   const position=clamp((price-low)/Math.max(.001,high-low),0,1);
+   // Zero-range days must not be treated as a weak close (the V44.0 one-price-board bug).
+   const flatRange=Math.abs(high-low)<=Math.max(.005,price*.00015);
+   const position=flatRange?1:clamp((price-low)/Math.max(.001,high-low),0,1);
    const pullback=high>0?(high-price)/high*100:0;
    const gap=open&&prev>0?(open/prev-1)*100:0;
    const limitPct=/^(300|301|688|689)/.test(code)?20:/^(8|9)/.test(code)?30:10;
+   // Price-limit approximation is only applicable to ordinary non-ST A shares; names
+   // with special rules and unverified market limits must not be asserted as locked.
    const nearLimit=pct>=limitPct-.65&&position>=.9;
+   const lockedLimitCandidate=nearLimit&&flatRange&&open!==null&&Math.abs(open-price)<=Math.max(.005,price*.00015);
+   const limitState=lockedLimitCandidate?'一字涨停候选（快照，未验证全天不开板）':nearLimit?'接近涨停':'非涨停结构';
+   const buyAccess=lockedLimitCandidate?'极低·不可作为可买入推荐':nearLimit?'需核实可成交性':'待确认';
    // Snapshot-only: acceleration, sustained volume, sector co-movement and sealing quality are unknown.
    // Do not reward raw percent gain linearly or penalize strong limit-up/gaps mechanically.
    const startParts={base:25,position:Math.round(position*18),strength:Math.round(clamp(pct,0,limitPct)*1.2),breakout:Math.round((position>=.8?12:position>=.6?6:0)),limitStructure:nearLimit?8:0,drawdownPenalty:Math.round(Math.max(0,pullback-1.2)*3),weakClosePenalty:position<.4?12:0};
+   // A locked board is strong in price, but the intraday "startup" is not observable.
+   // Keep the score as a snapshot index, not a claim that the user could buy.
    const startScore=Math.round(clamp(startParts.base+startParts.position+startParts.strength+startParts.breakout+startParts.limitStructure-startParts.drawdownPenalty-startParts.weakClosePenalty));
    const relayParts={base:34,position:Math.round(position*20),trendStrength:Math.round(Math.min(15,Math.max(0,pct)*1.7)),limitStructure:nearLimit?12:0,drawdownPenalty:Math.round(Math.max(0,pullback-1.5)*4),weakClosePenalty:position<.45?12:0,largeAmplitudePenalty:(amp??0)>14&&position<.6?8:0};
+   // Locked-board continuation cannot be inferred from OHLC alone. The 0-range
+   // position bug is fixed; continuation remains UNVERIFIED until board history,
+   // prior streak, sector and order book are available.
    const relayScore=Math.round(clamp(relayParts.base+relayParts.position+relayParts.trendStrength+relayParts.limitStructure-relayParts.drawdownPenalty-relayParts.weakClosePenalty-relayParts.largeAmplitudePenalty));
    const risk=[];if(position<.4)risk.push('日内位置偏弱');if(pullback>2.5)risk.push('高点回撤明显');if(amp>14&&position<.6)risk.push('大振幅且收盘位置偏弱');
    const grade=startScore>=75&&relayScore>=70&&risk.length===0?'A':startScore>=65&&relayScore>=60?'B':'C';
-   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,scoreVersion:'V44.0',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct}});
+   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,limitState,lockedLimitCandidate,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT',scoreVersion:'V44.1',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct,flatRange,limitState,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT'}});
 
  }
  return items;
@@ -70,7 +82,7 @@ async function auditTracked(env){
  const result=await env.DB.prepare('SELECT DISTINCT code FROM aq_v42_signals WHERE trade_date>=? ORDER BY code LIMIT 120').bind(new Date(Date.now()-8*86400000).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})).all();
  const codes=(result.results||[]).map(x=>x.code);let saved=0,failed=0;
  for(let i=0;i<codes.length;i+=25){
-  try{const q=await quote(codes.slice(i,i+25));const stmts=q.map(x=>env.DB.prepare('INSERT OR IGNORE INTO aq_v44_quote_audit(trade_date,code,quote_time,name,price,start_score,relay_score,score_version,source,captured_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(day,x.code,x.quoteTime,x.name,x.price,x.startScore,x.relayScore,'V44.0','Tencent-public',now.toISOString()));if(stmts.length){await env.DB.batch(stmts);saved+=stmts.length;}}
+  try{const q=await quote(codes.slice(i,i+25));const stmts=q.map(x=>env.DB.prepare('INSERT OR IGNORE INTO aq_v44_quote_audit(trade_date,code,quote_time,name,price,start_score,relay_score,score_version,source,captured_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(day,x.code,x.quoteTime,x.name,x.price,x.startScore,x.relayScore,'V44.1','Tencent-public',now.toISOString()));if(stmts.length){await env.DB.batch(stmts);saved+=stmts.length;}}
   catch(e){failed++}
  }
  return {tracked:codes.length,saved,failed,note:'仅追踪已有TOP3历史代码，不代表全市场扫描或官方收盘价'};
@@ -111,7 +123,7 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const rows=await quote([code],true).catch(()=>[]);
   if(!rows.length)return json({error:'无有效报价'},503);
   const x=scoreItem(rows[0]);
-  return json({code,name:x.name,quoteTime:x.quoteTime,startScore:x.startScore,relayScore:x.relayScore,scoreVersion:x.scoreVersion,breakdown:x.scoreBreakdown,notice:'未经历史校准的快照评分；缺少连续样本时不能作为正式买入信号。'});
+  return json({code,name:x.name,quoteTime:x.quoteTime,startScore:x.startScore,relayScore:x.relayScore,limitState:x.limitState,buyAccess:x.buyAccess,relayConfidence:x.relayConfidence,scoreVersion:x.scoreVersion,breakdown:x.scoreBreakdown,notice:'未经历史校准的快照评分；缺少连续样本时不能作为正式买入信号。'});
  }
  if(u.pathname==='/api/sector/status')return json({ready:false,reason:'尚无已验证的行业/概念映射与实时板块报价源；不伪造数据'});
   if(u.pathname==='/api/health')return json({ok:true,version:'AQ V44.0 Score Audit',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
