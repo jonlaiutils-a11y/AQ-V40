@@ -67,7 +67,7 @@ async function quote(codes,allowStale=false){
    const relayScore=Math.round(clamp(relayParts.base+relayParts.position+relayParts.trendStrength+relayParts.limitStructure-relayParts.drawdownPenalty-relayParts.weakClosePenalty-relayParts.largeAmplitudePenalty));
    const risk=[];if(position<.4)risk.push('日内位置偏弱');if(pullback>2.5)risk.push('高点回撤明显');if(amp>14&&position<.6)risk.push('大振幅且收盘位置偏弱');
    const grade=startScore>=75&&relayScore>=70&&risk.length===0?'A':startScore>=65&&relayScore>=60?'B':'C';
-   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,limitState,lockedLimitCandidate,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT',scoreVersion:'V44.1',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct,flatRange,limitState,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT'}});
+   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,limitState,lockedLimitCandidate,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT',scoreVersion:'V44.2',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct,flatRange,limitState,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT'}});
 
  }
  return items;
@@ -82,7 +82,7 @@ async function auditTracked(env){
  const result=await env.DB.prepare('SELECT DISTINCT code FROM aq_v42_signals WHERE trade_date>=? ORDER BY code LIMIT 120').bind(new Date(Date.now()-8*86400000).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})).all();
  const codes=(result.results||[]).map(x=>x.code);let saved=0,failed=0;
  for(let i=0;i<codes.length;i+=25){
-  try{const q=await quote(codes.slice(i,i+25));const stmts=q.map(x=>env.DB.prepare('INSERT OR IGNORE INTO aq_v44_quote_audit(trade_date,code,quote_time,name,price,start_score,relay_score,score_version,source,captured_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(day,x.code,x.quoteTime,x.name,x.price,x.startScore,x.relayScore,'V44.1','Tencent-public',now.toISOString()));if(stmts.length){await env.DB.batch(stmts);saved+=stmts.length;}}
+  try{const q=await quote(codes.slice(i,i+25));const stmts=q.map(x=>env.DB.prepare('INSERT OR IGNORE INTO aq_v44_quote_audit(trade_date,code,quote_time,name,price,start_score,relay_score,score_version,source,captured_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(day,x.code,x.quoteTime,x.name,x.price,x.startScore,x.relayScore,'V44.2','Tencent-public',now.toISOString()));if(stmts.length){await env.DB.batch(stmts);saved+=stmts.length;}}
   catch(e){failed++}
  }
  return {tracked:codes.length,saved,failed,note:'仅追踪已有TOP3历史代码，不代表全市场扫描或官方收盘价'};
