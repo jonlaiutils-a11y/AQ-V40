@@ -4,7 +4,16 @@ const LEGACY_CODES=['000001','000002','000063','000333','000651','000725','00080
 const PREFIXES=['000','001','002','003','300','301','600','601','603','605','688','689','920'];
 const UNIVERSE=PREFIXES.flatMap(prefix=>Array.from({length:1000},(_,i)=>prefix+String(i).padStart(3,'0')));
 const SEGMENT_SIZE=400;
-function scoreItem(x){const momentum=Math.max(0,Math.min(100,Math.round(45+x.pct*5+x.position*25-(x.pct>8?12:0)-(x.amp>10?10:0))));const quality=Math.round(.45*x.startScore+.35*x.relayScore+.2*momentum);const chase=x.pct>8||x.position<.35||x.amp>12;x.aqScore=quality;x.grade=quality>=82&&!chase?'S':quality>=73&&!chase?'A':quality>=60?'B':quality>=45?'C':'D';x.risk=[...x.risk,...(x.pct>6&&x.position>.85?['临近高位，等待回踩']:[])];x.action=chase?'不买·风险过滤':quality>=73?'强势备选·等待买点':'观察·未确认';return x;}
+function clamp(v,lo=0,hi=100){return Math.max(lo,Math.min(hi,v))}
+// V44 research scores: interpretable, uncalibrated; never probabilities.
+function scoreItem(x){
+ const quality=Math.round(.52*x.startScore+.48*x.relayScore);
+ x.aqScore=quality;
+ const eligible=x.dataQuality==='PARTIAL' ? false : x.startScore>=75&&x.relayScore>=70;
+ x.grade=eligible&&quality>=85?'S':eligible?'A':quality>=65?'B':quality>=48?'C':'D';
+ x.action=x.dataQuality==='PARTIAL'?'观察·数据不足':eligible?'强势备选·等待持续确认':'观察·未确认';
+ return x;
+}
 const source='腾讯公开行情接口（非官方，可能限流或失效）';
 const num=v=>{if(v===undefined||v===null||v===''||v==='-')return null;const x=Number(v);return Number.isFinite(x)?x:null};
 const market=code=>/^92/.test(code)?'bj':/^(6|9)/.test(code)?'sh':'sz';
@@ -29,28 +38,45 @@ async function quote(codes,allowStale=false){
    const quoteDate=qt.slice(0,8),todayCN=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/-/g,'');
    if(quoteDate!==todayCN&&!allowStale)continue;
    const pct=num(f[32])??((price/prev-1)*100),high=num(f[33])??price,low=num(f[34])??price;
-   const turn=num(f[38]),amp=num(f[43]);
-   const position=Math.max(0,Math.min(1,(price-low)/Math.max(.001,high-low)));
-   const startScore=Math.max(0,Math.min(100,Math.round(38+position*25+Math.min(Math.max(pct,0),8)*4+(turn===null?0:Math.min(turn,12))-(amp>12?15:0))));
-   // 接力分是未回测的风险排序指标，不是次日上涨概率。
+   // Tencent fields: [38] is turnover ratio in some public schemas; [44] can differ by feed.
+   // Neither field is used for turnover scoring until independently verified.
+   const turn=null,amp=num(f[43]);
+   const open=num(f[5]);
+   const position=clamp((price-low)/Math.max(.001,high-low),0,1);
    const pullback=high>0?(high-price)/high*100:0;
-   const gap=num(f[5])&&prev>0?(num(f[5])/prev-1)*100:0;
-   const relayScore=Math.max(0,Math.min(100,Math.round(
-     28+position*23+Math.min(16,Math.max(0,pct)*2.5)
-     +Math.min(7,Math.max(0,turn??0)*.9)
-     -Math.max(0,pullback-.35)*11
-     -Math.max(0,(amp??0)-6)*2.2
-     -Math.max(0,pct-6)*5
-     -Math.max(0,gap-4)*3
-   )));
-   const risk=[];if(pct>8)risk.push('涨幅较大，谨防追高');if(position<.4)risk.push('日内位置偏弱');if(amp>12)risk.push('振幅较大');
-   const grade=startScore>=82&&relayScore>=65&&risk.length===0?'A':startScore>=65&&relayScore>=50?'B':'C';
-   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open:num(f[5]),change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev});
+   const gap=open&&prev>0?(open/prev-1)*100:0;
+   const limitPct=/^(300|301|688|689)/.test(code)?20:/^(8|9)/.test(code)?30:10;
+   const nearLimit=pct>=limitPct-.65&&position>=.9;
+   // Snapshot-only: acceleration, sustained volume, sector co-movement and sealing quality are unknown.
+   // Do not reward raw percent gain linearly or penalize strong limit-up/gaps mechanically.
+   const startParts={base:25,position:Math.round(position*18),strength:Math.round(clamp(pct,0,limitPct)*1.2),breakout:Math.round((position>=.8?12:position>=.6?6:0)),limitStructure:nearLimit?8:0,drawdownPenalty:Math.round(Math.max(0,pullback-1.2)*3),weakClosePenalty:position<.4?12:0};
+   const startScore=Math.round(clamp(startParts.base+startParts.position+startParts.strength+startParts.breakout+startParts.limitStructure-startParts.drawdownPenalty-startParts.weakClosePenalty));
+   const relayParts={base:34,position:Math.round(position*20),trendStrength:Math.round(Math.min(15,Math.max(0,pct)*1.7)),limitStructure:nearLimit?12:0,drawdownPenalty:Math.round(Math.max(0,pullback-1.5)*4),weakClosePenalty:position<.45?12:0,largeAmplitudePenalty:(amp??0)>14&&position<.6?8:0};
+   const relayScore=Math.round(clamp(relayParts.base+relayParts.position+relayParts.trendStrength+relayParts.limitStructure-relayParts.drawdownPenalty-relayParts.weakClosePenalty-relayParts.largeAmplitudePenalty));
+   const risk=[];if(position<.4)risk.push('日内位置偏弱');if(pullback>2.5)risk.push('高点回撤明显');if(amp>14&&position<.6)risk.push('大振幅且收盘位置偏弱');
+   const grade=startScore>=75&&relayScore>=70&&risk.length===0?'A':startScore>=65&&relayScore>=60?'B':'C';
+   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,scoreVersion:'V44.0',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct}});
+
  }
  return items;
 }
+async function auditTracked(env){
+ if(!env.DB)return {error:'D1未绑定'};
+ const now=new Date(),parts=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(x=>[x.type,x.value]));
+ const minute=Number(parts.hour)*60+Number(parts.minute);
+ if(['Sat','Sun'].includes(parts.weekday)||!((minute>=570&&minute<690)||(minute>=780&&minute<900)))return {skipped:'非通常交易时段（节假日还需交易所日历核验）'};
+ const day=`${parts.year}-${parts.month}-${parts.day}`;
+ // Track existing D1 signal symbols only. This is NOT a whole-market background scanner.
+ const result=await env.DB.prepare('SELECT DISTINCT code FROM aq_v42_signals WHERE trade_date>=? ORDER BY code LIMIT 120').bind(new Date(Date.now()-8*86400000).toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})).all();
+ const codes=(result.results||[]).map(x=>x.code);let saved=0,failed=0;
+ for(let i=0;i<codes.length;i+=25){
+  try{const q=await quote(codes.slice(i,i+25));const stmts=q.map(x=>env.DB.prepare('INSERT OR IGNORE INTO aq_v44_quote_audit(trade_date,code,quote_time,name,price,start_score,relay_score,score_version,source,captured_at) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(day,x.code,x.quoteTime,x.name,x.price,x.startScore,x.relayScore,'V44.0','Tencent-public',now.toISOString()));if(stmts.length){await env.DB.batch(stmts);saved+=stmts.length;}}
+  catch(e){failed++}
+ }
+ return {tracked:codes.length,saved,failed,note:'仅追踪已有TOP3历史代码，不代表全市场扫描或官方收盘价'};
+}
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});
-export default {async fetch(req,env){const u=new URL(req.url);
+export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).catch(e=>console.error("AQ V44 cron",String(e))))},async fetch(req,env){const u=new URL(req.url);
  if(u.pathname==='/api/db/status'){
    if(!env.DB)return json({bound:false,v42Ready:false,legacyReady:false});
    const tables=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('aq_v42_signals','aq_rank_history','aq_top3_events','aq_signals','aq_early_events')").all().catch(()=>({results:[]}));
@@ -74,8 +100,21 @@ export default {async fetch(req,env){const u=new URL(req.url);
   try{const d=await env.DB.prepare('SELECT * FROM aq_early_events WHERE trade_date=? ORDER BY first_quote_time ASC LIMIT 500').bind(day).all();return json({items:d.results,day});}
   catch(e){return json({error:'早期信号表不可用，请执行 migration_v422.sql',detail:String(e)},503)}
  }
+ if(u.pathname==='/api/v44/audit/status'){
+  if(!env.DB)return json({ready:false,reason:'D1未绑定'},503);
+  try{const r=await env.DB.prepare('SELECT COUNT(*) AS rows,COUNT(DISTINCT code) AS symbols,MAX(captured_at) AS last_capture FROM aq_v44_quote_audit').first();return json({ready:true,...r,scope:'仅已记录TOP3股票的后台快照',notBacktest:true});}
+  catch(e){return json({ready:false,reason:'需执行migration_v440.sql',detail:String(e)},503)}
+ }
+ if(u.pathname==='/api/v44/score-explain'){
+  const code=u.searchParams.get('code')||'';
+  if(!/^\d{6}$/.test(code))return json({error:'code须为6位数字'},400);
+  const rows=await quote([code],true).catch(()=>[]);
+  if(!rows.length)return json({error:'无有效报价'},503);
+  const x=scoreItem(rows[0]);
+  return json({code,name:x.name,quoteTime:x.quoteTime,startScore:x.startScore,relayScore:x.relayScore,scoreVersion:x.scoreVersion,breakdown:x.scoreBreakdown,notice:'未经历史校准的快照评分；缺少连续样本时不能作为正式买入信号。'});
+ }
  if(u.pathname==='/api/sector/status')return json({ready:false,reason:'尚无已验证的行业/概念映射与实时板块报价源；不伪造数据'});
-  if(u.pathname==='/api/health')return json({ok:true,version:'AQ V42.3 Strong Start Audit',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
+  if(u.pathname==='/api/health')return json({ok:true,version:'AQ V44.0 Score Audit',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/cr/status')return json({version:'41.9-phase1',ready:false,provider:null,crStatus:'待授权数据；未生成分数',historyDb:!!env.DB,adapter:'vendor-neutral',note:'仅建立接口状态与数据契约；不接受客户端伪造的主动买卖数据',serverTime:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
  if(u.pathname==='/api/segment'){
@@ -104,7 +143,7 @@ export default {async fetch(req,env){const u=new URL(req.url);
   const result=await Promise.allSettled(chunks.map(c=>quote(c,true)));const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
- if(u.pathname==='/api/diagnostics')return json({version:'41.9',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',persistence:!!env.DB,quoteSource:source,backgroundScan:false});
+ if(u.pathname==='/api/diagnostics')return json({version:'41.9',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',scoreVersion:'V44.0',scoreCalibration:'uncalibrated',backgroundScan:false,persistence:!!env.DB,quoteSource:source});
  if(u.pathname==='/api/history'&&req.method==='GET'){
   if(!env.DB)return json({enabled:false,error:'尚未配置D1数据库，无法读取持久化历史'},503);
   const day=u.searchParams.get('day');if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return json({error:'day须为YYYY-MM-DD'},400);
