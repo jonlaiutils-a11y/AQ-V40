@@ -32,7 +32,17 @@ async function quote(codes,allowStale=false){
    const turn=num(f[38]),amp=num(f[43]);
    const position=Math.max(0,Math.min(1,(price-low)/Math.max(.001,high-low)));
    const startScore=Math.max(0,Math.min(100,Math.round(38+position*25+Math.min(Math.max(pct,0),8)*4+(turn===null?0:Math.min(turn,12))-(amp>12?15:0))));
-   const relayScore=Math.max(0,Math.min(100,Math.round(30+position*22+(pct>=2&&pct<=8?18:0)-(pct>9?18:0)-(amp>12?12:0))));
+   // 接力分是未回测的风险排序指标，不是次日上涨概率。
+   const pullback=high>0?(high-price)/high*100:0;
+   const gap=num(f[5])&&prev>0?(num(f[5])/prev-1)*100:0;
+   const relayScore=Math.max(0,Math.min(100,Math.round(
+     28+position*23+Math.min(16,Math.max(0,pct)*2.5)
+     +Math.min(7,Math.max(0,turn??0)*.9)
+     -Math.max(0,pullback-.35)*11
+     -Math.max(0,(amp??0)-6)*2.2
+     -Math.max(0,pct-6)*5
+     -Math.max(0,gap-4)*3
+   )));
    const risk=[];if(pct>8)risk.push('涨幅较大，谨防追高');if(position<.4)risk.push('日内位置偏弱');if(amp>12)risk.push('振幅较大');
    const grade=startScore>=82&&relayScore>=65&&risk.length===0?'A':startScore>=65&&relayScore>=50?'B':'C';
    items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open:num(f[5]),change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev});
