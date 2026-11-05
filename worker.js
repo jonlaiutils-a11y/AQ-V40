@@ -100,9 +100,15 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   let body=await req.json().catch(()=>null);
   if(!body||!Array.isArray(body.items)||body.items.length>50)return json({error:'信号格式错误'},400);
   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  const good=body.items.filter(x=>/^\d{6}$/.test(x.code||'')&&Number.isFinite(x.price)&&x.price>0&&['PREWARN','CONFIRM','INVALID','EXPIRED'].includes(x.kind)&&/^20\d{12}$/.test(x.quoteTime||'')&&x.quoteTime.slice(0,8)===today.replace(/-/g,''));
+  const good=body.items.filter(x=>/^\d{6}$/.test(x.code||'')&&Number.isFinite(x.price)&&x.price>0&&['PREWARN','CONFIRM','INVALID','EXPIRED','RADAR'].includes(x.kind)&&/^20\d{12}$/.test(x.quoteTime||'')&&x.quoteTime.slice(0,8)===today.replace(/-/g,''));
   try{
-   if(good.length)await env.DB.batch(good.map(x=>env.DB.prepare(`INSERT INTO aq_early_events(trade_date,code,kind,name,first_quote_time,first_price,first_seen_at,first_score,reason,last_quote_time,last_price,last_seen_at,samples) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(trade_date,code,kind) DO UPDATE SET last_quote_time=excluded.last_quote_time,last_price=excluded.last_price,last_seen_at=excluded.last_seen_at,samples=aq_early_events.samples+1`).bind(today,x.code,x.kind,String(x.name||'').slice(0,40),x.quoteTime,x.price,new Date().toISOString(),Number.isFinite(x.startScore)?x.startScore:null,String(x.reason||'').slice(0,120),x.quoteTime,x.price,new Date().toISOString(),1)));
+   if(good.length)await env.DB.batch(good.map(x=>env.DB.prepare(`INSERT INTO aq_early_events(trade_date,code,kind,name,first_quote_time,first_price,first_seen_at,first_score,reason,last_quote_time,last_price,last_seen_at,samples) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(trade_date,code,kind) DO UPDATE SET
+ first_quote_time=CASE WHEN excluded.first_quote_time<aq_early_events.first_quote_time THEN excluded.first_quote_time ELSE aq_early_events.first_quote_time END,
+ first_price=CASE WHEN excluded.first_quote_time<aq_early_events.first_quote_time THEN excluded.first_price ELSE aq_early_events.first_price END,
+ reason=CASE WHEN excluded.first_quote_time<aq_early_events.first_quote_time THEN excluded.reason ELSE aq_early_events.reason END,
+ last_quote_time=CASE WHEN excluded.last_quote_time>aq_early_events.last_quote_time THEN excluded.last_quote_time ELSE aq_early_events.last_quote_time END,
+ last_price=CASE WHEN excluded.last_quote_time>aq_early_events.last_quote_time THEN excluded.last_price ELSE aq_early_events.last_price END,
+ last_seen_at=excluded.last_seen_at,samples=aq_early_events.samples+1`).bind(today,x.code,x.kind,String(x.name||'').slice(0,40),x.quoteTime,x.price,new Date().toISOString(),Number.isFinite(x.startScore)?x.startScore:null,String(x.reason||'').slice(0,120),x.quoteTime,x.price,new Date().toISOString(),1)));
    return json({saved:good.length,day:today});
   }catch(e){return json({error:'早期信号表不可用，请执行 migration_v422.sql',detail:String(e)},503)}
  }
