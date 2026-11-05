@@ -162,6 +162,37 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
  if(u.pathname==='/api/diagnostics')return json({version:'41.9',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',scoreVersion:'V44.0',scoreCalibration:'uncalibrated',backgroundScan:false,persistence:!!env.DB,quoteSource:source});
+ // V44.7: read-only premarket historical snapshot; never re-label old quotes as live signals.
+ if(u.pathname==='/api/v447/premarket'){
+  if(!env.DB)return json({ready:false,error:'D1未绑定',items:[],watch:[]},503);
+  const dateCN=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const cutoff=u.searchParams.get('before')||dateCN;
+  if(!/^20\d{2}-\d{2}-\d{2}$/.test(cutoff))return json({error:'日期格式错误'},400);
+  const sources=[];let days=[];
+  for(const [table,col] of [['aq_early_events','trade_date'],['aq_v42_signals','trade_date'],['aq_rank_history','day']]){
+   try{const q=await env.DB.prepare(`SELECT MAX(${col}) AS d FROM ${table} WHERE ${col} < ?`).bind(cutoff).first();if(q?.d)days.push(q.d);sources.push(table)}catch(e){}
+  }
+  const day=days.sort().at(-1)||null;
+  if(!day)return json({ready:true,day:null,items:[],watch:[],coverage:'无可用的历史候选记录；不使用今天或未来的数据填充昨天',sources});
+  const map=new Map();
+  function add(row,origin){if(!/^\d{6}$/.test(row.code||''))return;let x=map.get(row.code);if(!x){x={code:row.code,name:row.name||'',sources:[],firstTime:null,firstPrice:null,lastPrice:null,startScore:null,relayScore:null,bestRank:null,firstRank:null,signal:false};map.set(row.code,x)}
+   if(!x.name&&row.name)x.name=row.name;
+   if(!x.sources.includes(origin))x.sources.push(origin);
+   if(row.first_price>0&&(!x.firstTime||String(row.firstTime||'')<x.firstTime)){x.firstTime=String(row.firstTime);x.firstPrice=row.first_price}
+   if(row.last_price>0)x.lastPrice=row.last_price;
+   if(Number.isFinite(row.start_score))x.startScore=row.start_score;
+   if(Number.isFinite(row.relay_score))x.relayScore=row.relay_score;
+   if(row.best_rank>0)x.bestRank=x.bestRank?Math.min(x.bestRank,row.best_rank):row.best_rank;
+   if(row.first_rank>0)x.firstRank=x.firstRank?Math.min(x.firstRank,row.first_rank):row.first_rank;
+   if(origin==='AQ_TOP3')x.signal=true;
+  }
+  try{const r=await env.DB.prepare('SELECT code,name,first_quote_time AS firstTime,first_price,last_price,kind FROM aq_early_events WHERE trade_date=? ORDER BY first_quote_time LIMIT 250').bind(day).all();for(const x of r.results||[])add(x,'早期记录:'+x.kind)}catch(e){}
+  try{const r=await env.DB.prepare('SELECT code,name,first_quote_time AS firstTime,first_price,last_price,start_score,relay_score,first_rank FROM aq_v42_signals WHERE trade_date=? ORDER BY first_rank LIMIT 100').bind(day).all();for(const x of r.results||[])add(x,'AQ_TOP3')}catch(e){}
+  try{const r=await env.DB.prepare('SELECT code,name,first_seen AS firstTime,first_price,last_price,best_rank FROM aq_rank_history WHERE day=? ORDER BY best_rank LIMIT 200').bind(day).all();for(const x of r.results||[])add(x,'历史排名快照')}catch(e){}
+  const items=[...map.values()].sort((a,b)=>(a.bestRank??999)-(b.bestRank??999)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1));
+  const watch=[...items].filter(x=>x.relayScore!==null||x.startScore!==null).sort((a,b)=>(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1)).slice(0,10);
+  return json({ready:true,day,items:items.slice(0,30),watch,observedCount:items.length,sources,coverage:'仅D1曾保存的股票，不代表昨日全市场涨幅TOP30；价格为记录快照而非经核验收盘价；次日分是旧版未校准研究评分，不能作为买入信号。'});
+ }
  if(u.pathname==='/api/history'&&req.method==='GET'){
   if(!env.DB)return json({enabled:false,error:'尚未配置D1数据库，无法读取持久化历史'},503);
   const day=u.searchParams.get('day');if(!/^\d{4}-\d{2}-\d{2}$/.test(day||''))return json({error:'day须为YYYY-MM-DD'},400);
