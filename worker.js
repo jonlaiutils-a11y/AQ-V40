@@ -174,24 +174,32 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   }
   const day=days.sort().at(-1)||null;
   if(!day)return json({ready:true,day:null,items:[],watch:[],coverage:'无可用的历史候选记录；不使用今天或未来的数据填充昨天',sources});
-  const map=new Map();
-  function add(row,origin){if(!/^\d{6}$/.test(row.code||''))return;let x=map.get(row.code);if(!x){x={code:row.code,name:row.name||'',sources:[],firstTime:null,firstPrice:null,lastPrice:null,startScore:null,relayScore:null,bestRank:null,firstRank:null,signal:false};map.set(row.code,x)}
+  const map=new Map(),counts={earlyValid:0,earlyInvalid:0,top3:0,rank:0};
+  function add(row,origin){
+   if(!/^\d{6}$/.test(row.code||''))return;
+   let x=map.get(row.code);
+   if(!x){x={code:row.code,name:row.name||'',sources:[],firstTime:null,firstPrice:null,lastPrice:null,startScore:null,relayScore:null,bestRank:null,firstRank:null,signal:false,hasEarly:false};map.set(row.code,x)}
    if(!x.name&&row.name)x.name=row.name;
    if(!x.sources.includes(origin))x.sources.push(origin);
-   if(row.first_price>0&&(!x.firstTime||String(row.firstTime||'')<x.firstTime)){x.firstTime=String(row.firstTime);x.firstPrice=row.first_price}
-   if(row.last_price>0)x.lastPrice=row.last_price;
-   if(Number.isFinite(row.start_score))x.startScore=row.start_score;
-   if(Number.isFinite(row.relay_score))x.relayScore=row.relay_score;
-   if(row.best_rank>0)x.bestRank=x.bestRank?Math.min(x.bestRank,row.best_rank):row.best_rank;
-   if(row.first_rank>0)x.firstRank=x.firstRank?Math.min(x.firstRank,row.first_rank):row.first_rank;
+   const ft=String(row.firstTime||'');
+   if(Number(row.first_price)>0&&ft&&(!x.firstTime||ft<x.firstTime)){x.firstTime=ft;x.firstPrice=Number(row.first_price)}
+   if(Number(row.last_price)>0)x.lastPrice=Number(row.last_price);
+   if(row.start_score!==null&&row.start_score!==undefined&&Number.isFinite(Number(row.start_score)))x.startScore=Number(row.start_score);
+   if(row.relay_score!==null&&row.relay_score!==undefined&&Number.isFinite(Number(row.relay_score)))x.relayScore=Number(row.relay_score);
+   if(Number(row.best_rank)>0)x.bestRank=x.bestRank?Math.min(x.bestRank,Number(row.best_rank)):Number(row.best_rank);
+   if(Number(row.first_rank)>0)x.firstRank=x.firstRank?Math.min(x.firstRank,Number(row.first_rank)):Number(row.first_rank);
    if(origin==='AQ_TOP3')x.signal=true;
   }
-  try{const r=await env.DB.prepare('SELECT code,name,first_quote_time AS firstTime,first_price,last_price,kind FROM aq_early_events WHERE trade_date=? ORDER BY first_quote_time LIMIT 250').bind(day).all();for(const x of r.results||[])add(x,'早期记录:'+x.kind)}catch(e){}
-  try{const r=await env.DB.prepare('SELECT code,name,first_quote_time AS firstTime,first_price,last_price,start_score,relay_score,first_rank FROM aq_v42_signals WHERE trade_date=? ORDER BY first_rank LIMIT 100').bind(day).all();for(const x of r.results||[])add(x,'AQ_TOP3')}catch(e){}
-  try{const r=await env.DB.prepare('SELECT code,name,first_seen AS firstTime,first_price,last_price,best_rank FROM aq_rank_history WHERE day=? ORDER BY best_rank LIMIT 200').bind(day).all();for(const x of r.results||[])add(x,'历史排名快照')}catch(e){}
-  const items=[...map.values()].sort((a,b)=>(a.bestRank??999)-(b.bestRank??999)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1));
-  const watch=[...items].filter(x=>x.relayScore!==null||x.startScore!==null).sort((a,b)=>(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1)).slice(0,10);
-  return json({ready:true,day,items:items.slice(0,30),watch,observedCount:items.length,sources,coverage:'仅D1曾保存的股票，不代表昨日全市场涨幅TOP30；价格为记录快照而非经核验收盘价；次日分是旧版未校准研究评分，不能作为买入信号。'});
+  // INVALID / EXPIRED are risk events, never positive candidates. RADAR and PREWARN are watch-only.
+  try{const r=await env.DB.prepare("SELECT code,name,first_quote_time AS firstTime,first_price,last_price,kind,first_score FROM aq_early_events WHERE trade_date=? AND kind IN ('PREWARN','CONFIRM','RADAR') ORDER BY first_quote_time LIMIT 1000").bind(day).all();for(const x of r.results||[]){counts.earlyValid++;add(x,'早期观察:'+x.kind);const v=map.get(x.code);if(v){v.hasEarly=true;if(v.startScore===null&&x.first_score!==null&&Number.isFinite(Number(x.first_score)))v.startScore=Number(x.first_score)}}}catch(e){counts.earlyError=String(e)}
+  try{const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM aq_early_events WHERE trade_date=? AND kind IN ('INVALID','EXPIRED')").bind(day).first();counts.earlyInvalid=r?.n||0}catch(e){}
+  try{const r=await env.DB.prepare('SELECT code,name,first_quote_time AS firstTime,first_price,last_price,start_score,relay_score,first_rank FROM aq_v42_signals WHERE trade_date=? ORDER BY first_rank LIMIT 300').bind(day).all();for(const x of r.results||[]){counts.top3++;add(x,'AQ_TOP3')}}catch(e){counts.top3Error=String(e)}
+  try{const r=await env.DB.prepare('SELECT code,name,first_seen AS firstTime,first_price,last_price,best_rank FROM aq_rank_history WHERE day=? ORDER BY best_rank LIMIT 1000').bind(day).all();for(const x of r.results||[]){counts.rank++;add(x,'历史排名快照')}}catch(e){counts.rankError=String(e)}
+  const items=[...map.values()].sort((a,b)=>(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1));
+  const watch=items.filter(x=>x.relayScore!==null&&x.relayScore>=60&&(x.signal||x.bestRank!==null)).sort((a,b)=>b.relayScore-a.relayScore||(a.bestRank??999)-(b.bestRank??999)).slice(0,10);
+  const coverage=counts.top3+counts.rank===0?'⚠️ 昨日缺少已保存的AQ榜单/确认信号；不能从风险事件生成强势榜。':'仅展示D1保存的正向观察、榜单和确认记录；不代表全市场涨幅榜。';
+  return json({ready:true,day,items:items.slice(0,30),watch,observedCount:items.length,counts,sources,coverage:coverage+' 排除风险事件 '+counts.earlyInvalid+' 条；观察名单要求有真实保存的次日评分且具备排名或TOP3记录。'});
+
  }
  if(u.pathname==='/api/history'&&req.method==='GET'){
   if(!env.DB)return json({enabled:false,error:'尚未配置D1数据库，无法读取持久化历史'},503);
