@@ -229,7 +229,7 @@ async function segment(force=false){
  const current=index;
  try{
   if(!scanStartedAt)scanStartedAt=Date.now();
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),18000);
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
   let r;try{r=await fetch('/api/segment?i='+current,{signal:controller.signal,cache:'no-store'})}finally{clearTimeout(timer)}
   if(!r.ok&&r.status!==206)throw Error('HTTP '+r.status);
   const d=await r.json();
@@ -251,7 +251,7 @@ async function segment(force=false){
    cycleSegments.clear();cycleFailed.clear();cycleValid.clear();scanStartedAt=Date.now();rank();
   }
   $('progress').textContent=`当前轮 ${cycleSegments.size}/${segments}段已返回 · 累计有效代码 ${pool.size}只 · 已结束${cycle}轮`+(lastFullCoverage?' · 最近整轮完整':' · 最近整轮不完整/未完成');
-  if(index!==0)$('status').textContent=(active()?'交易时段':'非交易时段')+` · 正在扫描第${index+1}/${segments}段`+(cycleFailed.size?' · 失败段 '+cycleFailed.size:'')+(lastSegmentError?' · '+lastSegmentError.slice(0,70):'');
+  if(index!==0)$('status').textContent=(active()?'交易时段':'非交易时段·历史快照仅供研究')+` · 正在扫描第${index+1}/${segments}段`+(cycleFailed.size?' · 失败段 '+cycleFailed.size:'')+(lastSegmentError?' · '+lastSegmentError.slice(0,70):'');
   if(!rankingAt||Date.now()-rankingAt>=60000)rank();
  }catch(e){
   fail++;segmentFailures++;lastSegmentError=String(e.message||e);
