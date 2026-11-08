@@ -244,7 +244,7 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const priority=x=>x.signal?0:x.rankEvidence?1:x.hasEarly?2:3;
   const items=[...map.values()].sort((a,b)=>priority(a)-priority(b)||Number(a.riskFlag)-Number(b.riskFlag)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1)||(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999));
   const watch=items.filter(x=>!x.riskFlag&&x.relayScore!==null&&x.relayScore>=60&&x.rankEvidence).sort((a,b)=>b.relayScore-a.relayScore||(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999)).slice(0,10);
-  const incomplete=items.filter(x=>!x.riskFlag&&x.hasEarly&&x.startScore!==null&&x.relayScore===null).sort((a,b)=>b.startScore-a.startScore).slice(0,10);
+  const incomplete=[]; // V44.13: no duplicate standalone missing-score pool
   // V44.10: expose a separate, explicitly UNVERIFIED historical candidate list.
   // These are NOT valid confirmed signals or scored next-day relay candidates.
   const researchCandidates=items.filter(x=>!x.riskFlag&&x.hasEarly&&x.startScore!==null&&x.startScore>=65)
