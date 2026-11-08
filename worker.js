@@ -20,7 +20,7 @@ const market=code=>/^92/.test(code)?'bj':/^(6|9)/.test(code)?'sh':'sz';
 async function quote(codes,allowStale=false){
  const symbols=codes.map(c=>market(c)+c).join(',');
  const url='https://qt.gtimg.cn/q='+symbols;
- const r=await fetch(url,{signal:AbortSignal.timeout(7000),headers:{'Accept':'*/*'}});
+ const r=await fetch(url,{signal:AbortSignal.timeout(10000),headers:{'Accept':'*/*'}});
  if(!r.ok)throw Error('腾讯行情 HTTP '+r.status);
  const buf=await r.arrayBuffer();
  // Tencent's response commonly uses GBK/GB18030 for Chinese names.
@@ -168,17 +168,31 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const cnNow=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Shanghai'}));
   const day=cnNow.getDay(),mins=cnNow.getHours()*60+cnNow.getMinutes();
   const liveSession=day>=1&&day<=5&&((mins>=570&&mins<690)||(mins>=780&&mins<900));
-  // Throttle public-source requests and retry only failed chunks.
-  for(let i=0;i<chunks.length;i+=5){
-   const batch=chunks.slice(i,i+5);
-   const results=await Promise.allSettled(batch.map(c=>quote(c,!liveSession)));
-   for(let j=0;j<results.length;j++){
-    if(results[j].status==='fulfilled'){all.push(...results[j].value);continue;}
-    errors.push('batch '+(i+j)+': '+String(results[j].reason));
+  // V44.12: bound parallelism and retry transport failures with smaller chunks.
+  // A fulfilled response with zero matches is not necessarily an error: this is a code-space scan.
+  let recovered=0, attempted=0;
+  async function fetchChunk(c,tag){
+   attempted++;
+   try{return {items:await quote(c,!liveSession),error:null}}catch(e){
+    // Split a failing batch to reduce upstream URL size and retry once per half.
+    if(c.length<=10)return {items:[],error:tag+': '+String(e)};
+    const mid=Math.ceil(c.length/2);
+    const halves=await Promise.allSettled([quote(c.slice(0,mid),!liveSession),quote(c.slice(mid),!liveSession)]);
+    const out=[],failed=[];
+    for(let k=0;k<halves.length;k++){
+     if(halves[k].status==='fulfilled'){out.push(...halves[k].value);recovered++}
+     else failed.push(tag+'.'+k+': '+String(halves[k].reason));
+    }
+    return {items:out,error:failed.length?failed.join(' | '):null};
    }
   }
-  const items=all.map(scoreItem);
-  return json({index,segments,requested:codes.length,received:items.length,failedBatches:errors.length,errors,elapsedMs:Date.now()-started,snapshotOnly:!liveSession,items,timestamp:new Date().toISOString(),source},errors.length?206:200);
+  for(let i=0;i<chunks.length;i+=3){
+   const batch=chunks.slice(i,i+3);
+   const results=await Promise.all(batch.map((c,j)=>fetchChunk(c,'batch '+(i+j))));
+   for(const r of results){all.push(...r.items);if(r.error)errors.push(r.error)}
+  }
+  const items=[...new Map(all.map(x=>[x.code,x])).values()].map(scoreItem);
+  return json({index,segments,requested:codes.length,received:items.length,failedBatches:errors.length,recoveredChunks:recovered,attemptedChunks:attempted,errors,elapsedMs:Date.now()-started,snapshotOnly:!liveSession,items,timestamp:new Date().toISOString(),source,complete:errors.length===0},errors.length?206:200);
  }
  if(u.pathname==='/api/quotes'){
   const codes=[...new Set((u.searchParams.get('codes')||'').split(',').filter(c=>/^\d{6}$/.test(c)))].slice(0,50);
