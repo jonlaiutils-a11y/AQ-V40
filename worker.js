@@ -226,8 +226,13 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const items=[...map.values()].sort((a,b)=>priority(a)-priority(b)||Number(a.riskFlag)-Number(b.riskFlag)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1)||(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999));
   const watch=items.filter(x=>!x.riskFlag&&x.relayScore!==null&&x.relayScore>=60&&x.rankEvidence).sort((a,b)=>b.relayScore-a.relayScore||(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999)).slice(0,10);
   const incomplete=items.filter(x=>!x.riskFlag&&x.hasEarly&&x.startScore!==null&&x.relayScore===null).sort((a,b)=>b.startScore-a.startScore).slice(0,10);
+  // V44.10: expose a separate, explicitly UNVERIFIED historical candidate list.
+  // These are NOT valid confirmed signals or scored next-day relay candidates.
+  const researchCandidates=items.filter(x=>!x.riskFlag&&x.hasEarly&&x.startScore!==null&&x.startScore>=65)
+    .sort((a,b)=>Number(b.signal)-Number(a.signal)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1))
+    .slice(0,15).map(x=>({...x,verification:x.relayScore===null?'缺少次日分':!x.rankEvidence?'缺少榜单/确认依据':'待次日行情验证'}));
   const coverage=counts.top3+counts.rank===0?'⚠️ 昨日缺少已保存的AQ榜单/确认信号，历史预警仅能用于观察。':'D1保存的历史预警、确认与排名快照；不代表全市场涨幅榜。';
-  return json({ready:true,day,items:items.slice(0,30),watch,incomplete,observedCount:items.length,counts,sources,coverage:coverage+' 已排除风险事件涉及的股票进入接力名单；缺失的历史次日分不补造。'});
+  return json({ready:true,day,items:items.slice(0,30),watch,incomplete,researchCandidates,observedCount:items.length,counts,sources,coverage:coverage+' 已排除风险事件涉及的股票进入接力名单；缺失的历史次日分不补造。研究候选不等于有效信号。'});
 
  }
  if(u.pathname==='/api/history'&&req.method==='GET'){
