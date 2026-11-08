@@ -109,7 +109,28 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
  last_quote_time=CASE WHEN excluded.last_quote_time>aq_early_events.last_quote_time THEN excluded.last_quote_time ELSE aq_early_events.last_quote_time END,
  last_price=CASE WHEN excluded.last_quote_time>aq_early_events.last_quote_time THEN excluded.last_price ELSE aq_early_events.last_price END,
  last_seen_at=excluded.last_seen_at,samples=aq_early_events.samples+1`).bind(today,x.code,x.kind,String(x.name||'').slice(0,40),x.quoteTime,x.price,new Date().toISOString(),Number.isFinite(x.startScore)?x.startScore:null,String(x.reason||'').slice(0,120),x.quoteTime,x.price,new Date().toISOString(),1)));
-   return json({saved:good.length,day:today});
+   // V44.9: persist point-in-time scores independently of legacy early-event schema.
+   // Keep the earliest quote snapshot immutable; never backfill missing old scores.
+   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS aq_v449_signal_snapshots (
+     trade_date TEXT NOT NULL,code TEXT NOT NULL,kind TEXT NOT NULL,
+     name TEXT,quote_time TEXT NOT NULL,price REAL NOT NULL,
+     start_score REAL,relay_score REAL,rank_at_signal INTEGER,
+     score_version TEXT NOT NULL,reason TEXT,recorded_at TEXT NOT NULL,
+     PRIMARY KEY(trade_date,code,kind))`).run();
+   if(good.length)await env.DB.batch(good.map(x=>env.DB.prepare(`INSERT INTO aq_v449_signal_snapshots
+     (trade_date,code,kind,name,quote_time,price,start_score,relay_score,rank_at_signal,score_version,reason,recorded_at)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(trade_date,code,kind) DO UPDATE SET
+     name=CASE WHEN excluded.quote_time<aq_v449_signal_snapshots.quote_time THEN excluded.name ELSE aq_v449_signal_snapshots.name END,
+     price=CASE WHEN excluded.quote_time<aq_v449_signal_snapshots.quote_time THEN excluded.price ELSE aq_v449_signal_snapshots.price END,
+     start_score=CASE WHEN excluded.quote_time<aq_v449_signal_snapshots.quote_time THEN excluded.start_score ELSE aq_v449_signal_snapshots.start_score END,
+     relay_score=CASE WHEN excluded.quote_time<aq_v449_signal_snapshots.quote_time THEN excluded.relay_score ELSE aq_v449_signal_snapshots.relay_score END,
+     rank_at_signal=CASE WHEN excluded.quote_time<aq_v449_signal_snapshots.quote_time THEN excluded.rank_at_signal ELSE aq_v449_signal_snapshots.rank_at_signal END,
+     quote_time=MIN(aq_v449_signal_snapshots.quote_time,excluded.quote_time)`).bind(
+     today,x.code,x.kind,String(x.name||'').slice(0,40),x.quoteTime,x.price,
+     Number.isFinite(x.startScore)?x.startScore:null,Number.isFinite(x.relayScore)?x.relayScore:null,
+     Number.isInteger(x.rank)&&x.rank>0?x.rank:null,'V44.9',String(x.reason||'').slice(0,120),new Date().toISOString())));
+   return json({saved:good.length,snapshotSaved:good.length,day:today});
   }catch(e){return json({error:'早期信号表不可用，请执行 migration_v422.sql',detail:String(e)},503)}
  }
  if(u.pathname==='/api/early/events'&&req.method==='GET'){
@@ -169,7 +190,7 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const cutoff=u.searchParams.get('before')||dateCN;
   if(!/^20\d{2}-\d{2}-\d{2}$/.test(cutoff))return json({error:'日期格式错误'},400);
   const sources=[];let days=[];
-  for(const [table,col] of [['aq_early_events','trade_date'],['aq_v42_signals','trade_date'],['aq_rank_history','day']]){
+  for(const [table,col] of [['aq_early_events','trade_date'],['aq_v42_signals','trade_date'],['aq_rank_history','day'],['aq_v449_signal_snapshots','trade_date']]){
    try{const q=await env.DB.prepare(`SELECT MAX(${col}) AS d FROM ${table} WHERE ${col} < ?`).bind(cutoff).first();if(q?.d)days.push(q.d);sources.push(table)}catch(e){}
   }
   const day=days.sort().at(-1)||null;
@@ -188,17 +209,25 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
    if(row.relay_score!==null&&row.relay_score!==undefined&&Number.isFinite(Number(row.relay_score)))x.relayScore=Number(row.relay_score);
    if(Number(row.best_rank)>0)x.bestRank=x.bestRank?Math.min(x.bestRank,Number(row.best_rank)):Number(row.best_rank);
    if(Number(row.first_rank)>0)x.firstRank=x.firstRank?Math.min(x.firstRank,Number(row.first_rank)):Number(row.first_rank);
-   if(origin==='AQ_TOP3')x.signal=true;
+   if(origin==='AQ_TOP3'||origin==='确认信号')x.signal=true;
   }
   // INVALID / EXPIRED are risk events, never positive candidates. RADAR and PREWARN are watch-only.
   try{const r=await env.DB.prepare("SELECT code,name,first_quote_time AS firstTime,first_price,last_price,kind,first_score FROM aq_early_events WHERE trade_date=? AND kind IN ('PREWARN','CONFIRM','RADAR') ORDER BY first_quote_time LIMIT 1000").bind(day).all();for(const x of r.results||[]){counts.earlyValid++;add(x,'早期观察:'+x.kind);const v=map.get(x.code);if(v){v.hasEarly=true;if(v.startScore===null&&x.first_score!==null&&Number.isFinite(Number(x.first_score)))v.startScore=Number(x.first_score)}}}catch(e){counts.earlyError=String(e)}
+  // New schema holds first-time scores and rank; historical rows with absent scores remain null.
+  try{const r=await env.DB.prepare("SELECT code,name,quote_time AS firstTime,price AS first_price,price AS last_price,start_score,relay_score,rank_at_signal AS first_rank,kind FROM aq_v449_signal_snapshots WHERE trade_date=? AND kind IN ('PREWARN','CONFIRM','RADAR') ORDER BY quote_time LIMIT 1500").bind(day).all();for(const x of r.results||[]){add(x,x.kind==='CONFIRM'?'确认信号':'完整评分快照');const v=map.get(x.code);if(v){v.hasEarly=true;if(x.kind==='CONFIRM')v.signal=true}}counts.snapshots=(r.results||[]).length}catch(e){counts.snapshotError=String(e)}
   try{const r=await env.DB.prepare("SELECT COUNT(*) AS n FROM aq_early_events WHERE trade_date=? AND kind IN ('INVALID','EXPIRED')").bind(day).first();counts.earlyInvalid=r?.n||0}catch(e){}
   try{const r=await env.DB.prepare('SELECT code,name,first_quote_time AS firstTime,first_price,last_price,start_score,relay_score,first_rank FROM aq_v42_signals WHERE trade_date=? ORDER BY first_rank LIMIT 300').bind(day).all();for(const x of r.results||[]){counts.top3++;add(x,'AQ_TOP3')}}catch(e){counts.top3Error=String(e)}
   try{const r=await env.DB.prepare('SELECT code,name,first_seen AS firstTime,first_price,last_price,best_rank FROM aq_rank_history WHERE day=? ORDER BY best_rank LIMIT 1000').bind(day).all();for(const x of r.results||[]){counts.rank++;add(x,'历史排名快照')}}catch(e){counts.rankError=String(e)}
-  const items=[...map.values()].sort((a,b)=>(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1));
-  const watch=items.filter(x=>x.relayScore!==null&&x.relayScore>=60&&(x.signal||x.bestRank!==null)).sort((a,b)=>b.relayScore-a.relayScore||(a.bestRank??999)-(b.bestRank??999)).slice(0,10);
-  const coverage=counts.top3+counts.rank===0?'⚠️ 昨日缺少已保存的AQ榜单/确认信号；不能从风险事件生成强势榜。':'仅展示D1保存的正向观察、榜单和确认记录；不代表全市场涨幅榜。';
-  return json({ready:true,day,items:items.slice(0,30),watch,observedCount:items.length,counts,sources,coverage:coverage+' 排除风险事件 '+counts.earlyInvalid+' 条；观察名单要求有真实保存的次日评分且具备排名或TOP3记录。'});
+  // Exclude known risk events from actionable watchlists, but preserve historical trace.
+  const risky=new Set();
+  try{const r=await env.DB.prepare("SELECT DISTINCT code FROM aq_early_events WHERE trade_date=? AND kind IN ('INVALID','EXPIRED') LIMIT 5000").bind(day).all();for(const x of r.results||[])risky.add(x.code)}catch(e){}
+  for(const x of map.values()){x.riskFlag=risky.has(x.code);x.scoreComplete=x.relayScore!==null;x.rankEvidence=x.signal||x.bestRank!==null||x.firstRank!==null;}
+  const priority=x=>x.signal?0:x.rankEvidence?1:x.hasEarly?2:3;
+  const items=[...map.values()].sort((a,b)=>priority(a)-priority(b)||Number(a.riskFlag)-Number(b.riskFlag)||(b.relayScore??-1)-(a.relayScore??-1)||(b.startScore??-1)-(a.startScore??-1)||(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999));
+  const watch=items.filter(x=>!x.riskFlag&&x.relayScore!==null&&x.relayScore>=60&&x.rankEvidence).sort((a,b)=>b.relayScore-a.relayScore||(a.bestRank??a.firstRank??999)-(b.bestRank??b.firstRank??999)).slice(0,10);
+  const incomplete=items.filter(x=>!x.riskFlag&&x.hasEarly&&x.startScore!==null&&x.relayScore===null).sort((a,b)=>b.startScore-a.startScore).slice(0,10);
+  const coverage=counts.top3+counts.rank===0?'⚠️ 昨日缺少已保存的AQ榜单/确认信号，历史预警仅能用于观察。':'D1保存的历史预警、确认与排名快照；不代表全市场涨幅榜。';
+  return json({ready:true,day,items:items.slice(0,30),watch,incomplete,observedCount:items.length,counts,sources,coverage:coverage+' 已排除风险事件涉及的股票进入接力名单；缺失的历史次日分不补造。'});
 
  }
  if(u.pathname==='/api/history'&&req.method==='GET'){
