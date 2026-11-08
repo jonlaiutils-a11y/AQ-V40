@@ -164,8 +164,11 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
    const d=day||latest?.day;
    if(!d)return json({ready:false,items:[],notice:'尚未生成盘后榜，请先点击盘后扫描并保存。'});
    const r=await env.DB.prepare('SELECT * FROM aq_eod_candidates WHERE trade_date=? AND pct>0 AND start_score>=60 AND locked_board=0 ORDER BY relay_score DESC,start_score DESC LIMIT 20').bind(d).all();
+   // Expose filter attrition, so an empty list cannot be mistaken for a quote-source outage.
+   const stats=await env.DB.prepare('SELECT COUNT(*) AS total, SUM(CASE WHEN pct>0 THEN 1 ELSE 0 END) AS positive, SUM(CASE WHEN pct>0 AND start_score>=60 THEN 1 ELSE 0 END) AS strong, SUM(CASE WHEN pct>0 AND start_score>=60 AND locked_board=0 THEN 1 ELSE 0 END) AS eligible, MIN(pct) AS min_pct, MAX(pct) AS max_pct FROM aq_eod_candidates WHERE trade_date=?').bind(d).first();
+   const dayCounts=await env.DB.prepare('SELECT trade_date AS day,COUNT(*) AS n,COUNT(DISTINCT segment) AS segments FROM aq_eod_candidates GROUP BY trade_date ORDER BY trade_date DESC LIMIT 5').all();
    const count=await env.DB.prepare('SELECT COUNT(*) AS n,COUNT(DISTINCT segment) AS segments FROM aq_eod_candidates WHERE trade_date=?').bind(d).first();
-   return json({ready:true,day:d,items:r.results||[],count:count?.n||0,segments:count?.segments||0,complete:(count?.segments||0)===Math.ceil(UNIVERSE.length/SEGMENT_SIZE),notice:'已在服务端筛选正涨幅、启动分≥60、排除一字板；单日快照未校准，不代表上涨概率，次日须重新确认。'});
+   return json({ready:true,day:d,items:r.results||[],filterStats:stats,dayCounts:dayCounts.results||[],count:count?.n||0,segments:count?.segments||0,complete:(count?.segments||0)===Math.ceil(UNIVERSE.length/SEGMENT_SIZE),notice:'已在服务端筛选正涨幅、启动分≥60、排除一字板；单日快照未校准，不代表上涨概率，次日须重新确认。'});
   }catch(e){return json({error:'请先执行 migration_v4414.sql: '+String(e)},503)}
  }
  if(u.pathname==='/api/eod/segment'&&req.method==='POST'){
