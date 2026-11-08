@@ -156,6 +156,31 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   if(u.pathname==='/api/health')return json({ok:true,version:'AQ V44.0 Score Audit',source,scope:'候选代码空间逐批发现，非官方上市名录',timestamp:new Date().toISOString()});
  if(u.pathname==='/api/cr/status')return json({version:'41.9-phase1',ready:false,provider:null,crStatus:'待授权数据；未生成分数',historyDb:!!env.DB,adapter:'vendor-neutral',note:'仅建立接口状态与数据契约；不接受客户端伪造的主动买卖数据',serverTime:new Date().toISOString()});
  if(u.pathname==='/api/universe')return json({mode:'候选代码空间逐批发现',candidateCount:UNIVERSE.length,segmentSize:SEGMENT_SIZE,segments:Math.ceil(UNIVERSE.length/SEGMENT_SIZE),warning:'代码空间包含大量未上市号码；仅已返回有效报价的代码计入股票数。完成全部分段前不可视为全市场。'});
+ if(u.pathname==='/api/eod/board'){
+  if(!env.DB)return json({error:'D1未绑定'},503);
+  try{
+   const day=u.searchParams.get('day')||'';
+   const latest=await env.DB.prepare('SELECT MAX(trade_date) AS day FROM aq_eod_candidates').first();
+   const d=day||latest?.day;
+   if(!d)return json({ready:false,items:[],notice:'尚未生成盘后榜，请先点击盘后扫描并保存。'});
+   const r=await env.DB.prepare('SELECT * FROM aq_eod_candidates WHERE trade_date=? ORDER BY relay_score DESC,start_score DESC LIMIT 30').bind(d).all();
+   const count=await env.DB.prepare('SELECT COUNT(*) AS n,COUNT(DISTINCT segment) AS segments FROM aq_eod_candidates WHERE trade_date=?').bind(d).first();
+   return json({ready:true,day:d,items:r.results||[],count:count?.n||0,segments:count?.segments||0,complete:(count?.segments||0)===Math.ceil(UNIVERSE.length/SEGMENT_SIZE),notice:'基于单日行情快照的未校准研究分数，不代表上涨概率；盘后名单需次日开盘重新确认。'});
+  }catch(e){return json({error:'请先执行 migration_v4414.sql: '+String(e)},503)}
+ }
+ if(u.pathname==='/api/eod/segment'&&req.method==='POST'){
+  if(!env.DB)return json({error:'D1未绑定'},503);
+  const idx=Number(u.searchParams.get('i'));
+  if(!Number.isInteger(idx)||idx<0||idx>=Math.ceil(UNIVERSE.length/SEGMENT_SIZE))return json({error:'分段无效'},400);
+  const codes=UNIVERSE.slice(idx*SEGMENT_SIZE,(idx+1)*SEGMENT_SIZE),out=[];let errors=0;
+  for(let i=0;i<codes.length;i+=40){try{out.push(...await quote(codes.slice(i,i+40),true))}catch(e){errors++}}
+  if(errors)return json({error:'行情源有'+errors+'批失败，本段不保存以免虚假完整',segment:idx,received:out.length},503);
+  const byDay=new Map();for(const x of out){const day=String(x.quoteTime||'').slice(0,8);if(!/^20\d{6}$/.test(day))continue;if(!byDay.has(day))byDay.set(day,[]);byDay.get(day).push(x)}
+  const day=[...byDay.keys()].sort().pop();if(!day)return json({error:'本段无有效历史行情',segment:idx},422);
+  const items=byDay.get(day);const statements=items.map(x=>env.DB.prepare(`INSERT INTO aq_eod_candidates(trade_date,code,name,close_price,pct,start_score,relay_score,high,low,open_price,quote_time,segment,limit_state,locked_board,risk,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(trade_date,code) DO UPDATE SET name=excluded.name,close_price=excluded.close_price,pct=excluded.pct,start_score=excluded.start_score,relay_score=excluded.relay_score,high=excluded.high,low=excluded.low,open_price=excluded.open_price,quote_time=excluded.quote_time,segment=excluded.segment,limit_state=excluded.limit_state,locked_board=excluded.locked_board,risk=excluded.risk,updated_at=excluded.updated_at`).bind(day,x.code,x.name,x.price,x.pct,x.startScore,x.relayScore,x.high,x.low,x.open,x.quoteTime,idx,x.limitState,x.lockedLimitCandidate?1:0,x.risk.join('；'),new Date().toISOString()));
+  try{for(let i=0;i<statements.length;i+=50)await env.DB.batch(statements.slice(i,i+50))}catch(e){return json({error:'D1写入失败，检查迁移: '+String(e)},503)}
+  return json({day,segment:idx,saved:items.length,errors:0});
+ }
  if(u.pathname==='/api/segment'){
   const index=Number(u.searchParams.get('i'));
   const segments=Math.ceil(UNIVERSE.length/SEGMENT_SIZE);
