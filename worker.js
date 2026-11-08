@@ -163,9 +163,9 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
    const latest=await env.DB.prepare('SELECT MAX(trade_date) AS day FROM aq_eod_candidates').first();
    const d=day||latest?.day;
    if(!d)return json({ready:false,items:[],notice:'尚未生成盘后榜，请先点击盘后扫描并保存。'});
-   const r=await env.DB.prepare('SELECT * FROM aq_eod_candidates WHERE trade_date=? ORDER BY relay_score DESC,start_score DESC LIMIT 30').bind(d).all();
+   const r=await env.DB.prepare('SELECT * FROM aq_eod_candidates WHERE trade_date=? AND pct>0 AND start_score>=60 AND locked_board=0 ORDER BY relay_score DESC,start_score DESC LIMIT 20').bind(d).all();
    const count=await env.DB.prepare('SELECT COUNT(*) AS n,COUNT(DISTINCT segment) AS segments FROM aq_eod_candidates WHERE trade_date=?').bind(d).first();
-   return json({ready:true,day:d,items:r.results||[],count:count?.n||0,segments:count?.segments||0,complete:(count?.segments||0)===Math.ceil(UNIVERSE.length/SEGMENT_SIZE),notice:'基于单日行情快照的未校准研究分数，不代表上涨概率；盘后名单需次日开盘重新确认。'});
+   return json({ready:true,day:d,items:r.results||[],count:count?.n||0,segments:count?.segments||0,complete:(count?.segments||0)===Math.ceil(UNIVERSE.length/SEGMENT_SIZE),notice:'已在服务端筛选正涨幅、启动分≥60、排除一字板；单日快照未校准，不代表上涨概率，次日须重新确认。'});
   }catch(e){return json({error:'请先执行 migration_v4414.sql: '+String(e)},503)}
  }
  if(u.pathname==='/api/eod/segment'&&req.method==='POST'){
@@ -179,7 +179,7 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const day=[...byDay.keys()].sort().pop();if(!day)return json({error:'本段无有效历史行情',segment:idx},422);
   const items=byDay.get(day);const statements=items.map(x=>env.DB.prepare(`INSERT INTO aq_eod_candidates(trade_date,code,name,close_price,pct,start_score,relay_score,high,low,open_price,quote_time,segment,limit_state,locked_board,risk,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(trade_date,code) DO UPDATE SET name=excluded.name,close_price=excluded.close_price,pct=excluded.pct,start_score=excluded.start_score,relay_score=excluded.relay_score,high=excluded.high,low=excluded.low,open_price=excluded.open_price,quote_time=excluded.quote_time,segment=excluded.segment,limit_state=excluded.limit_state,locked_board=excluded.locked_board,risk=excluded.risk,updated_at=excluded.updated_at`).bind(day,x.code,x.name,x.price,x.pct,x.startScore,x.relayScore,x.high,x.low,x.open,x.quoteTime,idx,x.limitState,x.lockedLimitCandidate?1:0,x.risk.join('；'),new Date().toISOString()));
   try{for(let i=0;i<statements.length;i+=50)await env.DB.batch(statements.slice(i,i+50))}catch(e){return json({error:'D1写入失败，检查迁移: '+String(e)},503)}
-  return json({day,segment:idx,saved:items.length,errors:0});
+  return json({day,segment:idx,saved:items.length,errors:0,notice:'保存的是行情原始交易日；跨交易日数据不会混成同一榜单'});
  }
  if(u.pathname==='/api/segment'){
   const index=Number(u.searchParams.get('i'));
