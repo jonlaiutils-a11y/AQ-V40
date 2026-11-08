@@ -163,17 +163,22 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const codes=UNIVERSE.slice(index*SEGMENT_SIZE,(index+1)*SEGMENT_SIZE);
   const chunks=[];for(let i=0;i<codes.length;i+=40)chunks.push(codes.slice(i,i+40));
   const started=Date.now(),all=[],errors=[];
+  // Off-hours and weekends: permit last trading snapshot for research only.
+  // Client quoteFresh() still blocks stale snapshots from live signals.
+  const cnNow=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Shanghai'}));
+  const day=cnNow.getDay(),mins=cnNow.getHours()*60+cnNow.getMinutes();
+  const liveSession=day>=1&&day<=5&&((mins>=570&&mins<690)||(mins>=780&&mins<900));
   // Throttle public-source requests and retry only failed chunks.
-  for(let i=0;i<chunks.length;i+=3){
-   const batch=chunks.slice(i,i+3);
-   const results=await Promise.allSettled(batch.map(c=>quote(c)));
+  for(let i=0;i<chunks.length;i+=5){
+   const batch=chunks.slice(i,i+5);
+   const results=await Promise.allSettled(batch.map(c=>quote(c,!liveSession)));
    for(let j=0;j<results.length;j++){
     if(results[j].status==='fulfilled'){all.push(...results[j].value);continue;}
-    try{all.push(...await quote(batch[j]));}catch(e){errors.push('batch '+(i+j)+': '+String(e));}
+    errors.push('batch '+(i+j)+': '+String(results[j].reason));
    }
   }
   const items=all.map(scoreItem);
-  return json({index,segments,requested:codes.length,received:items.length,failedBatches:errors.length,errors,elapsedMs:Date.now()-started,items,timestamp:new Date().toISOString(),source},errors.length?206:200);
+  return json({index,segments,requested:codes.length,received:items.length,failedBatches:errors.length,errors,elapsedMs:Date.now()-started,snapshotOnly:!liveSession,items,timestamp:new Date().toISOString(),source},errors.length?206:200);
  }
  if(u.pathname==='/api/quotes'){
   const codes=[...new Set((u.searchParams.get('codes')||'').split(',').filter(c=>/^\d{6}$/.test(c)))].slice(0,50);
