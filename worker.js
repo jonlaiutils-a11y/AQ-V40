@@ -56,18 +56,21 @@ async function quote(codes,allowStale=false){
    const buyAccess=lockedLimitCandidate?'极低·不可作为可买入推荐':nearLimit?'需核实可成交性':'待确认';
    // Snapshot-only: acceleration, sustained volume, sector co-movement and sealing quality are unknown.
    // Do not reward raw percent gain linearly or penalize strong limit-up/gaps mechanically.
-   const startParts={base:25,position:Math.round(position*18),strength:Math.round(clamp(pct,0,limitPct)*1.2),breakout:Math.round((position>=.8?12:position>=.6?6:0)),limitStructure:nearLimit?8:0,drawdownPenalty:Math.round(Math.max(0,pullback-1.2)*3),weakClosePenalty:position<.4?12:0};
-   // A locked board is strong in price, but the intraday "startup" is not observable.
-   // Keep the score as a snapshot index, not a claim that the user could buy.
-   const startScore=Math.round(clamp(startParts.base+startParts.position+startParts.strength+startParts.breakout+startParts.limitStructure-startParts.drawdownPenalty-startParts.weakClosePenalty));
-   const relayParts={base:34,position:Math.round(position*20),trendStrength:Math.round(Math.min(15,Math.max(0,pct)*1.7)),limitStructure:nearLimit?12:0,drawdownPenalty:Math.round(Math.max(0,pullback-1.5)*4),weakClosePenalty:position<.45?12:0,largeAmplitudePenalty:(amp??0)>14&&position<.6?8:0};
-   // Locked-board continuation cannot be inferred from OHLC alone. The 0-range
-   // position bug is fixed; continuation remains UNVERIFIED until board history,
-   // prior streak, sector and order book are available.
-   const relayScore=Math.round(clamp(relayParts.base+relayParts.position+relayParts.trendStrength+relayParts.limitStructure-relayParts.drawdownPenalty-relayParts.weakClosePenalty-relayParts.largeAmplitudePenalty));
+   // V45.2: price-only 0..100 research index. Do not score missing volume/sector as zero.
+   // 0..100 is a scale, NOT an empirical probability or a guarantee of reaching 100.
+   const relativeRise=clamp(pct/limitPct,0,1);
+   const startParts={base:18,position:Math.round(position*24),strength:Math.round(relativeRise*24),breakout:position>=.85?16:position>=.65?9:0,
+     sustainedNearHigh:pullback<=.35&&pct>=1.5?8:pullback<=.8&&pct>=1.5?4:0,
+     limitStructure:nearLimit?5:0,drawdownPenalty:Math.round(Math.max(0,pullback-.7)*6),weakClosePenalty:position<.45?14:0};
+   const startScore=Math.round(clamp(startParts.base+startParts.position+startParts.strength+startParts.breakout+startParts.sustainedNearHigh+startParts.limitStructure-startParts.drawdownPenalty-startParts.weakClosePenalty));
+   // Continuation remains a separate, uncalibrated price-structure score.
+   const relayParts={base:18,position:Math.round(position*25),trendStrength:Math.round(relativeRise*22),nearHigh:pullback<=.5?13:pullback<=1?6:0,
+     limitStructure:nearLimit?5:0,drawdownPenalty:Math.round(Math.max(0,pullback-.8)*7),weakClosePenalty:position<.5?16:0,
+     largeAmplitudePenalty:(amp??0)>14&&position<.6?10:0};
+   const relayScore=Math.round(clamp(relayParts.base+relayParts.position+relayParts.trendStrength+relayParts.nearHigh+relayParts.limitStructure-relayParts.drawdownPenalty-relayParts.weakClosePenalty-relayParts.largeAmplitudePenalty));
    const risk=[];if(position<.4)risk.push('日内位置偏弱');if(pullback>2.5)risk.push('高点回撤明显');if(amp>14&&position<.6)risk.push('大振幅且收盘位置偏弱');
    const grade=startScore>=75&&relayScore>=70&&risk.length===0?'A':startScore>=65&&relayScore>=60?'B':'C';
-   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,limitState,lockedLimitCandidate,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT',scoreVersion:'V44.3',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct,flatRange,limitState,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT'}});
+   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,limitState,lockedLimitCandidate,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT',scoreVersion:'V45.2-PRICE-SNAPSHOT',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度（仅前端跟踪）','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct,flatRange,limitState,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT'}});
 
  }
  return items;
