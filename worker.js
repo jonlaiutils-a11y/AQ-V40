@@ -9,7 +9,7 @@ function clamp(v,lo=0,hi=100){return Math.max(lo,Math.min(hi,v))}
 function scoreItem(x){
  const quality=Math.round(.52*x.startScore+.48*x.relayScore);
  x.aqScore=quality;
- const eligible=x.dataQuality==='PARTIAL' ? false : x.startScore>=75&&x.relayScore>=70;
+ const eligible=x.dataQuality==='PARTIAL' ? false : x.startScore>=75&&x.relayScore>=70&&!(x.risk||[]).length;
  x.grade=eligible&&quality>=85?'S':eligible?'A':quality>=65?'B':quality>=48?'C':'D';
  x.action=x.dataQuality==='PARTIAL'?'观察·数据不足':eligible?'强势备选·等待持续确认':'观察·未确认';
  return x;
@@ -59,18 +59,35 @@ async function quote(codes,allowStale=false){
    // V45.2: price-only 0..100 research index. Do not score missing volume/sector as zero.
    // 0..100 is a scale, NOT an empirical probability or a guarantee of reaching 100.
    const relativeRise=clamp(pct/limitPct,0,1);
-   const startParts={base:18,position:Math.round(position*24),strength:Math.round(relativeRise*24),breakout:position>=.85?16:position>=.65?9:0,
-     sustainedNearHigh:pullback<=.35&&pct>=1.5?8:pullback<=.8&&pct>=1.5?4:0,
-     limitStructure:nearLimit?5:0,drawdownPenalty:Math.round(Math.max(0,pullback-.7)*6),weakClosePenalty:position<.45?14:0};
-   const startScore=Math.round(clamp(startParts.base+startParts.position+startParts.strength+startParts.breakout+startParts.sustainedNearHigh+startParts.limitStructure-startParts.drawdownPenalty-startParts.weakClosePenalty));
-   // Continuation remains a separate, uncalibrated price-structure score.
-   const relayParts={base:18,position:Math.round(position*25),trendStrength:Math.round(relativeRise*22),nearHigh:pullback<=.5?13:pullback<=1?6:0,
-     limitStructure:nearLimit?5:0,drawdownPenalty:Math.round(Math.max(0,pullback-.8)*7),weakClosePenalty:position<.5?16:0,
-     largeAmplitudePenalty:(amp??0)>14&&position<.6?10:0};
-   const relayScore=Math.round(clamp(relayParts.base+relayParts.position+relayParts.trendStrength+relayParts.nearHigh+relayParts.limitStructure-relayParts.drawdownPenalty-relayParts.weakClosePenalty-relayParts.largeAmplitudePenalty));
+   // V45.3: separate observed price momentum from execution/risk gates.
+   // Previous V45.2 used uncapped pullback penalties (6/7 points per 1%),
+   // then penalized low range position again. A 6% retreat could wipe out
+   // nearly all of a genuine earlier impulse, causing scores of 2/4/11.
+   // This is a *snapshot momentum* index, not an entry recommendation.
+   const positiveRise=clamp(pct/limitPct,0,1);
+   const startParts={base:12,
+     strength:Math.round(positiveRise*46),
+     position:Math.round(position*14),
+     breakout:position>=.85?12:position>=.65?7:position>=.4?3:0,
+     sustainedNearHigh:pullback<=.35&&pct>=1.5?9:pullback<=.8&&pct>=1.5?5:0,
+     limitStructure:nearLimit?7:0,
+     drawdownPenalty:Math.round(Math.min(12,Math.max(0,pullback-.7)*2)),
+     weakClosePenalty:position<.35?5:0};
+   const startScore=Math.round(clamp(Object.entries(startParts).reduce((v,[k,n])=>v+(k.endsWith('Penalty')?-n:n),0)));
+   // Next-day score is independently based on current structure, with a
+   // bounded retreat penalty. It is NOT an estimated win probability.
+   const relayParts={base:14,
+     trendStrength:Math.round(positiveRise*30),
+     position:Math.round(position*24),
+     nearHigh:pullback<=.5?16:pullback<=1?8:0,
+     limitStructure:nearLimit?6:0,
+     drawdownPenalty:Math.round(Math.min(14,Math.max(0,pullback-.8)*2.5)),
+     weakClosePenalty:position<.35?6:0,
+     largeAmplitudePenalty:(amp??0)>14&&position<.6?6:0};
+   const relayScore=Math.round(clamp(Object.entries(relayParts).reduce((v,[k,n])=>v+(k.endsWith('Penalty')?-n:n),0)));
    const risk=[];if(position<.4)risk.push('日内位置偏弱');if(pullback>2.5)risk.push('高点回撤明显');if(amp>14&&position<.6)risk.push('大振幅且收盘位置偏弱');
-   const grade=startScore>=75&&relayScore>=70&&risk.length===0?'A':startScore>=65&&relayScore>=60?'B':'C';
-   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,limitState,lockedLimitCandidate,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT',scoreVersion:'V45.2-PRICE-SNAPSHOT',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度（仅前端跟踪）','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct,flatRange,limitState,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT'}});
+   const grade=startScore>=75&&relayScore>=70&&risk.length===0?'A':startScore>=65&&relayScore>=60&&risk.length===0?'B':'C';
+   items.push({code,name,price,pct:+pct.toFixed(2),volume:num(f[6]),amount:num(f[37]),turn,vr:null,amp,high,low,open,change:+(price-prev).toFixed(3),startScore,relayScore,grade,position:+position.toFixed(2),nearHigh:+((high-price)/high*100).toFixed(2),risk,action:'观察·等待确认',quoteTime:f[30]||null,prevClose:prev,limitState,lockedLimitCandidate,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT',scoreVersion:'V45.3-MOMENTUM-RISK-SEPARATED',dataQuality:'PARTIAL',scoreBreakdown:{start:startParts,relay:relayParts,missing:['连续有效报价加速度（仅前端跟踪）','连续成交量价承接','板块实时共振','涨停封板事件'],gapPct:+gap.toFixed(2),limitPct,flatRange,limitState,buyAccess,relayConfidence:lockedLimitCandidate?'UNVERIFIED_LOCKED_BOARD':'UNVERIFIED_SNAPSHOT'}});
 
  }
  return items;
