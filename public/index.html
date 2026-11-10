@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AQ V45.7 · 实时确认与三级雷达</title><style>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AQ V45.8 · 实时采样优先修复</title><style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0a1120;color:#e8f0fc;font:14px -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif}.wrap{max-width:1540px;margin:auto;padding:20px}.head{display:flex;justify-content:space-between;gap:15px;align-items:center;flex-wrap:wrap}h1{font-size:27px;margin:0 0 7px}h2{font-size:18px;margin:0 0 12px}.muted{color:#9caec9}.small{font-size:12px}.box{background:#151f32;border:1px solid #2a3952;border-radius:14px;padding:17px;margin:14px 0}.notice{border-color:#465166;background:transparent;line-height:1.5;padding:9px 13px;font-size:12px;color:#abbcd3}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.stat{font-size:23px;font-weight:700;margin-top:7px}.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}button,input,select{background:#263b5a;border:1px solid #466083;color:#fff;border-radius:8px;padding:10px}button{cursor:pointer}button.active{background:#23619b}.tablewrap{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;max-height:65vh;-webkit-overflow-scrolling:touch}table{border-collapse:collapse;width:max-content;min-width:100%;white-space:nowrap}#rows tr,#topcards tr,#focuscards tr{display:table-row}#rows td,#topcards td,#focuscards td{display:table-cell;vertical-align:middle}#rows td:nth-child(2),#topcards td:nth-child(2),#focuscards td:nth-child(2){min-width:125px}th{position:sticky;top:0;background:#243550;color:#d2dff0;text-align:left}td,th{padding:11px 10px;border-bottom:1px solid #2b3a50}td b{font-size:15px}.up{color:#ff8888}.down{color:#6de0a6}.warn{color:#ffcb84}.good{color:#81e4bd}.pill{display:inline-block;border:1px solid #607491;border-radius:6px;padding:3px 7px}.top{background:#203650}.bar{height:6px;background:#283b53;border-radius:8px;overflow:hidden;margin-top:6px}.fill{height:100%;background:#5d9ddb}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.card{background:#1b2b43;border:1px solid #354b69;border-radius:12px;padding:13px;line-height:1.9}.name{font-size:17px;font-weight:700}.price{font-size:22px;font-weight:700}.foot{line-height:1.7}code{color:#9bd7f7}@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.cards{grid-template-columns:1fr}.wrap{padding:10px}h1{font-size:21px}}.mini{width:85px;padding:7px}.modepick{min-width:84px}.alertrow{background:#3a2931}.profit{font-weight:700}.help{line-height:1.7;margin-top:8px}
 /* V44.7: independent responsive candidate cards, avoid iPad Safari table layout collapse */
 .candidate-list{display:flex;flex-direction:column;gap:9px;margin-top:13px;min-width:0;width:100%}
@@ -7,7 +7,7 @@
 @media(max-width:1100px){.candidate-row{grid-template-columns:28px minmax(100px,1fr) 85px 65px 55px 55px;gap:7px}.candidate-row .c-first,.candidate-row .c-proof{grid-column:span 3}.candidate-extra{grid-column:1/-1}}
 @media(max-width:650px){.candidate-row{grid-template-columns:25px minmax(105px,1fr) 85px 68px;gap:6px}.candidate-row .c-first,.candidate-row .c-proof{grid-column:span 2}.candidate-extra{grid-column:1/-1}}
 </style></head><body><div class="wrap">
-<header class="head"><div><h1>🚀 AQ V45.7 · 实时确认与三级雷达</h1><div class="muted">盘中强势发现 · 候选持续追踪 · 次日接力研究｜重点关注独立刷新｜行情过期禁止买入</div></div><div class="controls"><button id="start">启动 / 继续扫描</button><button id="pause">暂停扫描</button><label><input type="checkbox" id="autorefresh" checked> 重点股票每5秒刷新</label></div></header>
+<header class="head"><div><h1>🚀 AQ V45.8 · 实时采样优先修复</h1><div class="muted">盘中强势发现 · 候选持续追踪 · 次日接力研究｜重点关注独立刷新｜行情过期禁止买入</div></div><div class="controls"><button id="start">启动 / 继续扫描</button><button id="pause">暂停扫描</button><label><input type="checkbox" id="autorefresh" checked> 重点股票每5秒刷新</label></div></header>
 <section class="box notice"><b>⚠️ 研究测试版，非已验证的买入系统。</b> V45.7自选、价格确认TOP3、分级雷达TOP30共用候选数据；启动分仍为价格快照研究分（0–100），并在TOP30中直接显示预警等级；预警仅依据报价与价格轨迹，绝非买入信号。TOP3仅代表至少3次独立交易所时间戳的价格走势确认，不代表量价或资金承接已核验；涨停仍保留于搜索与重点关注；接力分仍未经验证，不代表次日涨跌。V44评分已取消机械高开及涨幅扣分；缺少连续行情时评分仅供观察。提前预警不代表未来上涨；行情有延迟，A股T+1存在隔夜风险。板块实时数据尚未接入可靠来源时显示“待接入”，不虚构板块涨幅、排名或资金流。</section>
 <section class="grid"><div class="box"><div class="muted">扫描状态</div><div class="stat" id="status">待启动</div></div><div class="box"><div class="muted">有效股票 / 扫描进度</div><div class="stat" id="progress">0 / 0</div></div><div class="box"><div class="muted">榜单更新时间</div><div class="stat" id="ranktime">—</div></div><div class="box"><div class="muted">报价刷新 / 失败</div><div class="stat" id="quotetime">—</div></div></section>
 <section class="box" hidden><div class="head"><h2>⭐ 我的自选股 · 不限数量 · 独立监测</h2><div class="controls"><input id="watchcode" inputmode="numeric" maxlength="6" placeholder="输入6位股票代码"><button id="watchadd">添加自选</button><button id="watchrefresh">立即刷新</button></div></div><div class="muted small" id="watchstatus">自选数量不限；交易时段分批刷新报价，数量越多完整轮询越久。数据保存在当前浏览器；关闭网页后不监控。</div><div class="tablewrap"><table><thead><tr><th>股票</th><th>现价</th><th>涨跌幅</th><th>启动/接力</th><th>模式</th><th>成本(元)</th><th>股数</th><th>盈亏(元/%)</th><th>警戒价</th><th>成交活跃度观察</th><th>行情时间</th><th>状态/条件提醒</th><th>操作</th></tr></thead><tbody id="watchrows"><tr><td colspan="13">暂无自选股</td></tr></tbody></table></div><p class="muted small help">持仓成本、股数和警戒价由你自行填写；警戒价触发仅为页面内条件提示，不是自动减仓指令。行情可能延迟，关闭页面后不监控、不推送。所有资料仅存于当前浏览器。</p></section>
@@ -105,7 +105,7 @@ function trackAcceleration(x){
  accelSamples.set(x.code,h.filter(v=>t-v.t<=600000).slice(-12));
 }
 function accelLabel(x){const a=acceleration(x);if(!quoteFresh(x))return '—';if(!a)return '⚪ 待采样';const st=signalState(x);if(a.velocity>0&&a.acceleration>.08)return x.pct<0||x.position<.55?'🟡 反弹加速':'🚀 向上加速';return a.velocity>0?'🟡 上行':'🔴 转弱';}
-function evidenceLabel(x){if(!quoteFresh(x))return '⚪ 行情待核';const h=signalState(x).hist||[];const a=acceleration(x);if(h.length<3||!a)return '⚪ 连续报价待确认（'+h.length+'/3；需不同交易所时间戳）';const first=h[0],last=h[h.length-1];const delta=(last.price/first.price-1)*100;const up=h.slice(-3).every((v,i,arr)=>i===0||v.price>=arr[i-1].price);const draw=x.high>0?(x.high-x.price)/x.high*100:0;return (up?'↗连续':'↕反复')+' '+(delta>=0?'+':'')+delta.toFixed(2)+'% / 回撤'+draw.toFixed(2)+'%';}
+function evidenceLabel(x){if(!quoteFresh(x))return '⚪ 行情待核';const h=signalState(x).hist||[];const a=acceleration(x);if(h.length<3||!a)return '🟡 预警观察（'+Math.min(h.length,3)+'/3；需不同交易所时间戳；未确认）';const first=h[0],last=h[h.length-1];const delta=(last.price/first.price-1)*100;const up=h.slice(-3).every((v,i,arr)=>i===0||v.price>=arr[i-1].price);const draw=x.high>0?(x.high-x.price)/x.high*100:0;return (up?'↗连续':'↕反复')+' '+(delta>=0?'+':'')+delta.toFixed(2)+'% / 回撤'+draw.toFixed(2)+'%';}
 function signalState(x){return signalStates.get(x.code)||{stage:'⚪ 数据不足',stability:null,at:'—',reason:'等待不同时间戳的有效报价'};}
 function observeSignal(x){
  trackAcceleration(x);
@@ -234,7 +234,7 @@ function warningLevel(x){
  if(!w.eligible)return '⚪ 普通候选';
  if(st.startsWith('🟢')&&w.a&&w.a.velocity>0)return '🔴 强势预警·价格已确认';
  if(w.a&&w.a.velocity>0&&w.a.acceleration>0)return '🟠 提前预警·加速观察';
- return '🟡 提前观察·待连续确认';
+ return '🟡 提前观察·待连续确认（'+Math.min((signalState(x).hist||[]).length,3)+'/3）';
 }
 function confirmedTop3(){
  if(!active())return [];
@@ -346,25 +346,37 @@ async function quotes(){
  const codes=priorityUniverse();if(!codes.length)return;
  quoteBusy=true;
  try{
-  // 重点关注+TOP3+候选池轮流分批刷新，避免大量自选时饿死后面的候选。
-  const batches=[];for(let i=0;i<codes.length;i+=25)batches.push(codes.slice(i,i+25));
-  const n=Math.min(3,batches.length),start=priorityCursor%batches.length;
+  // V45.8: 自选股每轮独立优先请求；其余候选按轮询游标并行追踪。
+  // 不将浏览器刷新次数冒充交易所时间戳，接口不更新时保持待确认。
+  const focusBatch=[...new Set(focusCodes)].filter(c=>/^\d{6}$/.test(c)).slice(0,100);
+  const otherCodes=codes.filter(c=>!focusBatch.includes(c));
+  const batches=[];for(let i=0;i<otherCodes.length;i+=25)batches.push(otherCodes.slice(i,i+25));
+  const focusBatches=[];for(let i=0;i<focusBatch.length;i+=25)focusBatches.push(focusBatch.slice(i,i+25));
+  const n=Math.min(2,batches.length),start=batches.length?priorityCursor%batches.length:0;
+  const targets=[...focusBatches,...Array.from({length:n},(_,j)=>batches[(start+j)%batches.length])];
   let ok=0,failed=0;
-  for(let j=0;j<n;j++){
-   const batch=batches[(start+j)%batches.length];
+  async function fetchBatch(batch){
+   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
    try{
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
-    let r;try{r=await fetch('/api/quotes?codes='+batch.join(','),{signal:controller.signal,cache:'no-store'})}finally{clearTimeout(timer)}
+    const r=await fetch('/api/quotes?codes='+batch.join(','),{signal:controller.signal,cache:'no-store'});
     if(!r.ok&&r.status!==206)throw Error('HTTP '+r.status);
-    const d=await r.json();failed+=d.failedBatches||0;recordCr(d.items||[]);
-    for(const x of d.items||[]){if(!valid(x))continue;captureDiscovery(x);observeSignal(x);pool.set(x.code,x);if(focusCodes.includes(x.code)){watchData.set(x.code,x);moneyTrack(x)}ok++}
-   }catch(e){failed++;}
+    const d=await r.json();return {items:d.items||[],failed:d.failedBatches||0};
+   }finally{clearTimeout(timer)}
   }
-  priorityCursor=(start+n)%batches.length;priorityAt=Date.now();prioritySucceeded+=ok;priorityFailed+=failed;
+  // 控制并发为2，避免对上游接口施加无上限的压力。
+  for(let i=0;i<targets.length;i+=2){
+   const results=await Promise.allSettled(targets.slice(i,i+2).map(fetchBatch));
+   for(const result of results){
+    if(result.status!=='fulfilled'){failed++;continue;}
+    failed+=result.value.failed;recordCr(result.value.items);
+    for(const x of result.value.items){if(!valid(x))continue;captureDiscovery(x);observeSignal(x);pool.set(x.code,x);if(focusCodes.includes(x.code)){watchData.set(x.code,x);moneyTrack(x)}ok++}
+   }
+  }
+  priorityCursor=batches.length?(start+n)%batches.length:0;priorityAt=Date.now();prioritySucceeded+=ok;priorityFailed+=failed;
   quoteAt=Date.now();
   // 价格和信号实时更新；排名每15秒重算，避免持续重排。
   if(!rankingAt||Date.now()-rankingAt>=15000)rank();else render();renderFocus();
-  $('quotetime').textContent=new Date().toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})+` · 本次${ok}只有效 · ${n}/${batches.length}批 · 累计失败${priorityFailed}`+' · 稳定追踪'+candidateFollow.size+'只候选 · 按个股行情时间判断有效性';
+  $('quotetime').textContent=new Date().toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})+` · 本次${ok}只有效 · 自选${focusBatches.length}批 + 候选${n}/${batches.length}批 · 累计失败${priorityFailed}`+' · 稳定追踪'+candidateFollow.size+'只候选 · 按个股行情时间判断有效性';
  }finally{quoteBusy=false}
 }
 $('loadhistory').onclick=loadTop3;$('start').onclick=()=>{paused=false;manualScanning=true;segment(true)};$('pause').onclick=()=>{paused=true;manualScanning=false;$('status').textContent='已暂停'};$('search').oninput=render;for(const b of document.querySelectorAll('[data-mode]'))b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x===b));rank()};init().then(()=>{if(active())segment();refreshFocus(true)});setInterval(()=>segment(),1200);setInterval(quotes,5000);setInterval(()=>{if(active())refreshFocus()},10000);setInterval(()=>{if(!active())$('quotetime').textContent='⏸ 非交易时段 · 行情为最近交易快照，非实时';if(scanStartedAt&&segments){const completed=cycle?segments:index;const elapsed=(Date.now()-scanStartedAt)/1000;const remain=completed>0&&index>0?Math.ceil(elapsed/index*(segments-index)):null;if(!paused&&busy&&remain!==null)$('status').textContent='扫描中 · 本轮预计剩余 '+remain+' 秒（估算）'}},10000);setInterval(()=>{if(active()&&rankingAt&&Date.now()-rankingAt>=15000)rank()},5000);
