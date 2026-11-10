@@ -119,7 +119,7 @@ function observeSignal(x){
  const rising=hasEnough&&last.price>=first.price*1.003&&last.pct>=first.pct+.25;
  const accel=acceleration(x);
  const lastThree=a.slice(-3),upSteps=lastThree.length===3&&lastThree[1].price>=lastThree[0].price&&lastThree[2].price>=lastThree[1].price;
- const breakout=!x.lockedLimitCandidate&&hasEnough&&rising&&upSteps&&accel&&accel.velocity>0&&x.pct>=1.5&&x.position>=.7&&draw<.8;
+ const breakout=!x.lockedLimitCandidate&&hasEnough&&rising&&upSteps&&x.pct>=1.5&&x.position>=.7&&draw<.8; // 3个独立交易所时间戳已证明价格连续性；加速度属于额外参考，不能重复阻断确认
  const stale=stamp.slice(0,8)!==bj().date.replace(/-/g,'')||!Number.isFinite(sampleAt)||now-sampleAt>120000||sampleAt-now>60000;
  const failing=(hasEnough&&last.price<first.price*.985&&x.position<.4)||(draw>=3&&x.position<.35);
  const cooling=(draw>=1.0&&x.position>=.45)||(hasEnough&&last.price<first.price*.99);
@@ -241,8 +241,8 @@ function confirmedTop3(){
  return list.filter(x=>{
   if(!valid(x)||!quoteFresh(x)||x.lockedLimitCandidate||x.limitState==='接近涨停')return false;
   const st=signalState(x), h=st.hist||[], a=acceleration(x);
-  if(!st.stage.startsWith('🟢')||h.length<3||!a||a.velocity<=0)return false;
-  if(new Set(h.map(v=>v.stamp)).size<3||h[h.length-1].at-h[0].at<30000)return false;
+  if(!st.stage.startsWith('🟢')||h.length<3)return false; // 加速度窗口不足时不重复否决已由真实报价验证的连续上涨
+  if(new Set(h.map(v=>v.stamp)).size<3||h[h.length-1].at-h[0].at<30000||h[h.length-1].price<h[0].price*1.003)return false;
   const draw=x.high>0?(x.high-x.price)/x.high*100:Infinity;
   return x.pct>=1.5&&x.pct<=9.5&&x.position>=.7&&draw<.8&&x.startScore>=70&&x.relayScore>=65;
  }).sort((a,b)=>opportunityScore(b)-opportunityScore(a)).slice(0,3);
@@ -346,13 +346,13 @@ async function quotes(){
  const codes=priorityUniverse();if(!codes.length)return;
  quoteBusy=true;
  try{
-  // V45.8: 自选股每轮独立优先请求；其余候选按轮询游标并行追踪。
+  // V45.9: 自选股优先；候选每轮追踪最多3批，缩短确认等待。
   // 不将浏览器刷新次数冒充交易所时间戳，接口不更新时保持待确认。
   const focusBatch=[...new Set(focusCodes)].filter(c=>/^\d{6}$/.test(c)).slice(0,100);
   const otherCodes=codes.filter(c=>!focusBatch.includes(c));
   const batches=[];for(let i=0;i<otherCodes.length;i+=25)batches.push(otherCodes.slice(i,i+25));
   const focusBatches=[];for(let i=0;i<focusBatch.length;i+=25)focusBatches.push(focusBatch.slice(i,i+25));
-  const n=Math.min(2,batches.length),start=batches.length?priorityCursor%batches.length:0;
+  const n=Math.min(3,batches.length),start=batches.length?priorityCursor%batches.length:0;
   const targets=[...focusBatches,...Array.from({length:n},(_,j)=>batches[(start+j)%batches.length])];
   let ok=0,failed=0;
   async function fetchBatch(batch){
@@ -363,7 +363,7 @@ async function quotes(){
     const d=await r.json();return {items:d.items||[],failed:d.failedBatches||0};
    }finally{clearTimeout(timer)}
   }
-  // 控制并发为2，避免对上游接口施加无上限的压力。
+  // 并发上限为2；每轮候选3批，减少轮询空档但不制造虚假时间戳。
   for(let i=0;i<targets.length;i+=2){
    const results=await Promise.allSettled(targets.slice(i,i+2).map(fetchBatch));
    for(const result of results){
