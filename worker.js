@@ -246,7 +246,17 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const codes=[...new Set((u.searchParams.get('codes')||'').split(',').filter(c=>/^\d{6}$/.test(c)))].slice(0,50);
   if(!codes.length)return json({error:'请提供1—50个6位代码'},400);
   const chunks=[];for(let i=0;i<codes.length;i+=25)chunks.push(codes.slice(i,i+25));
-  const result=await Promise.allSettled(chunks.map(c=>quote(c,true)));const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
+  // A failed upstream batch gets one smaller-chunk retry; preserve partial success.
+  const result=await Promise.allSettled(chunks.map(async c=>{
+   try{return await quote(c,true)}catch(e){
+    if(c.length<=8)throw e;
+    const mid=Math.ceil(c.length/2);
+    const retry=await Promise.allSettled([quote(c.slice(0,mid),true),quote(c.slice(mid),true)]);
+    if(retry.every(v=>v.status==='rejected'))throw e;
+    return retry.flatMap(v=>v.status==='fulfilled'?v.value:[]);
+   }
+  }));
+  const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
  if(u.pathname==='/api/diagnostics')return json({version:'41.9',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',scoreVersion:'V44.0',scoreCalibration:'uncalibrated',backgroundScan:false,persistence:!!env.DB,quoteSource:source});
