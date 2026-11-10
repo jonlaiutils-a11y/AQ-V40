@@ -20,7 +20,7 @@ const market=code=>/^92/.test(code)?'bj':/^(6|9)/.test(code)?'sh':'sz';
 async function quote(codes,allowStale=false){
  const symbols=codes.map(c=>market(c)+c).join(',');
  const url='https://qt.gtimg.cn/q='+symbols;
- const r=await fetch(url,{signal:AbortSignal.timeout(10000),headers:{'Accept':'*/*'}});
+ const r=await fetch(url,{signal:AbortSignal.timeout(7000),headers:{'Accept':'*/*'}});
  if(!r.ok)throw Error('腾讯行情 HTTP '+r.status);
  const buf=await r.arrayBuffer();
  // Tencent's response commonly uses GBK/GB18030 for Chinese names.
@@ -234,8 +234,8 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
     return {items:out,error:failed.length?failed.join(' | '):null};
    }
   }
-  for(let i=0;i<chunks.length;i+=3){
-   const batch=chunks.slice(i,i+3);
+  for(let i=0;i<chunks.length;i+=2){
+   const batch=chunks.slice(i,i+2);
    const results=await Promise.all(batch.map((c,j)=>fetchChunk(c,'batch '+(i+j))));
    for(const r of results){all.push(...r.items);if(r.error)errors.push(r.error)}
   }
