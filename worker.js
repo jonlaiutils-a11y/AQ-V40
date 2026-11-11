@@ -259,7 +259,7 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
- if(u.pathname==='/api/diagnostics')return json({version:'41.9',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',scoreVersion:'V44.0',scoreCalibration:'uncalibrated',backgroundScan:false,persistence:!!env.DB,quoteSource:source});
+ if(u.pathname==='/api/diagnostics')return json({version:'46.0',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',scoreVersion:'V44.0',scoreCalibration:'uncalibrated',backgroundScan:false,persistence:!!env.DB,quoteSource:source});
  // V44.7: read-only premarket historical snapshot; never re-label old quotes as live signals.
  if(u.pathname==='/api/v447/premarket'){
   if(!env.DB)return json({ready:false,error:'D1未绑定',items:[],watch:[]},503);
