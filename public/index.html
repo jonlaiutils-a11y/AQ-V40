@@ -447,13 +447,20 @@ $('loadhistory').onclick=loadTop3;$('start').onclick=()=>{paused=false;manualSca
 const FOCUS_KEY='aq_v417_focus';
 let focusCodes=[];try{focusCodes=JSON.parse(localStorage.getItem(FOCUS_KEY)||'[]').filter(x=>/^\d{6}$/.test(x))}catch(e){}
 // 旧版自选股自动合并进重点关注，保留旧数据，不人为限制数量。
-for(const c of watchCodes){if(!focusCodes.includes(c))focusCodes.push(c)}
-try{localStorage.setItem(FOCUS_KEY,JSON.stringify(focusCodes))}catch(e){}
+// 仅首次迁移旧自选；后续刷新绝不重新添加用户已移除的股票。
+const FOCUS_MIGRATED_KEY='aq_v465_focus_migrated_once';
+if(localStorage.getItem(FOCUS_MIGRATED_KEY)!=='1'){
+ for(const c of watchCodes){if(!focusCodes.includes(c))focusCodes.push(c)}
+ try{localStorage.setItem(FOCUS_KEY,JSON.stringify(focusCodes));localStorage.setItem(FOCUS_MIGRATED_KEY,'1')}catch(e){}
+}
+// 旧自选不再作为独立名单参与扫描；移除重点关注即彻底退出两份名单。
+watchCodes=watchCodes.filter(c=>focusCodes.includes(c));
+try{localStorage.setItem(WATCH_KEY,JSON.stringify(watchCodes))}catch(e){}
 const moneySamples=new Map();let focusBusy=false;let focusRequestAt=0;let focusLastSuccessAt=0;let focusFailureCount=0;
 function moneyTrack(x){if(!valid(x)||!Number.isFinite(x.amount)||x.amount<0)return;const stamp=String(x.quoteTime||'');if(!/^20\d{12}$/.test(stamp))return;const t=Date.UTC(+stamp.slice(0,4),+stamp.slice(4,6)-1,+stamp.slice(6,8),+stamp.slice(8,10),+stamp.slice(10,12),+stamp.slice(12,14));let arr=moneySamples.get(x.code)||[];if(arr.length&&stamp<=arr[arr.length-1].stamp){if(stamp===arr[arr.length-1].stamp)return;arr=[]}if(arr.length&&x.amount<arr[arr.length-1].amount)arr=[];arr.push({t,stamp,amount:x.amount,price:x.price});arr=arr.filter(v=>t-v.t<=12*60000);moneySamples.set(x.code,arr)}
 function moneyWindow(code,minutes){const a=moneySamples.get(code)||[];if(a.length<2)return null;const last=a[a.length-1],prior=[...a].reverse().find(v=>last.t-v.t>=minutes*60000);if(!prior||(last.t-prior.t)>minutes*108000)return null;if(last.amount<prior.amount||last.t-prior.t>minutes*108000)return null;return {delta:last.amount-prior.amount,price:last.price-prior.price}}
 function moneyLabel(x){const a=moneySamples.get(x.code)||[],w1=moneyWindow(x.code,1),w5=moneyWindow(x.code,5);const n=v=>v?v.delta.toFixed(2)+'（接口原始单位）':'采样中';const tag=!w1?'⚪ 样本不足':w1.price>0?'🟢 价格上行':w1.price<0?'🔴 价格下行':'🟡 价格持平';return `<div>近1分钟成交额增量：${n(w1)}</div><div>近5分钟成交额增量：${n(w5)}</div><div>${tag}</div><div class="muted small">累计成交额采样 ${a.length} 条；不等于净流入</div>`}
-function renderFocus(){document.getElementById('focuscards').innerHTML=focusCodes.map((code,i)=>{const x=watchData.get(code)||pool.get(code);return rowHtml(x?x:{code},i,true)}).join('')||'<tr><td colspan="15">尚未添加重点股票</td></tr>';document.querySelectorAll('[data-focus-remove]').forEach(b=>b.onclick=()=>{focusCodes=focusCodes.filter(c=>c!==b.dataset.focusRemove);localStorage.setItem(FOCUS_KEY,JSON.stringify(focusCodes));renderFocus()})}
+function renderFocus(){document.getElementById('focuscards').innerHTML=focusCodes.map((code,i)=>{const x=watchData.get(code)||pool.get(code);return rowHtml(x?x:{code},i,true)}).join('')||'<tr><td colspan="15">尚未添加重点股票</td></tr>';document.querySelectorAll('[data-focus-remove]').forEach(b=>b.onclick=()=>{const removed=b.dataset.focusRemove;focusCodes=focusCodes.filter(c=>c!==removed);watchCodes=watchCodes.filter(c=>c!==removed);watchData.delete(removed);candidateFollow.delete(removed);try{localStorage.setItem(FOCUS_KEY,JSON.stringify(focusCodes));localStorage.setItem(WATCH_KEY,JSON.stringify(watchCodes))}catch(e){}renderFocus()})}
 async function refreshFocus(force=false){
  // V46.5: 与33段扫描、候选评分、榜单渲染解耦。独立5秒尝试；同一时刻最多一个请求。
  if(focusBusy||!focusCodes.length||document.hidden||(!force&&!active()))return;
@@ -472,7 +479,7 @@ async function refreshFocus(force=false){
    if(res.status!=='fulfilled'){errors++;continue;}
    errors+=Number(res.value.failedBatches)||0;
    for(const x of res.value.items||[]){
-    if(!valid(x))continue;
+    if(!focusCodes.includes(x.code)||!valid(x))continue;
     const old=watchData.get(x.code)||pool.get(x.code);
     if(!old||String(old.quoteTime||'')!==String(x.quoteTime||''))changed++;
     if(storeLatestQuote(x)){observeSignal(x);moneyTrack(x);ok++}
