@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AQ V46.10 · 沪深自选兼容版</title><style>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AQ V46.11 · 推荐链路修复版</title><style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0a1120;color:#e8f0fc;font:14px -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif}.wrap{max-width:1540px;margin:auto;padding:20px}.head{display:flex;justify-content:space-between;gap:15px;align-items:center;flex-wrap:wrap}h1{font-size:27px;margin:0 0 7px}h2{font-size:18px;margin:0 0 12px}.muted{color:#9caec9}.small{font-size:12px}.box{background:#151f32;border:1px solid #2a3952;border-radius:14px;padding:17px;margin:14px 0}.notice{border-color:#465166;background:transparent;line-height:1.5;padding:9px 13px;font-size:12px;color:#abbcd3}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.stat{font-size:23px;font-weight:700;margin-top:7px}.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}button,input,select{background:#263b5a;border:1px solid #466083;color:#fff;border-radius:8px;padding:10px}button{cursor:pointer}button.active{background:#23619b}.tablewrap{display:block;width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;max-height:65vh;-webkit-overflow-scrolling:touch}table{border-collapse:collapse;width:max-content;min-width:100%;white-space:nowrap}#rows tr,#topcards tr,#focuscards tr{display:table-row}#rows td,#topcards td,#focuscards td{display:table-cell;vertical-align:middle}#rows td:nth-child(2),#topcards td:nth-child(2),#focuscards td:nth-child(2){min-width:125px}th{position:sticky;top:0;background:#243550;color:#d2dff0;text-align:left}td,th{padding:11px 10px;border-bottom:1px solid #2b3a50}td b{font-size:15px}.up{color:#ff8888}.down{color:#6de0a6}.warn{color:#ffcb84}.good{color:#81e4bd}.pill{display:inline-block;border:1px solid #607491;border-radius:6px;padding:3px 7px}.top{background:#203650}.bar{height:6px;background:#283b53;border-radius:8px;overflow:hidden;margin-top:6px}.fill{height:100%;background:#5d9ddb}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.card{background:#1b2b43;border:1px solid #354b69;border-radius:12px;padding:13px;line-height:1.9}.name{font-size:17px;font-weight:700}.price{font-size:22px;font-weight:700}.foot{line-height:1.7}code{color:#9bd7f7}@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.cards{grid-template-columns:1fr}.wrap{padding:10px}h1{font-size:21px}}.mini{width:85px;padding:7px}.modepick{min-width:84px}.alertrow{background:#3a2931}.profit{font-weight:700}.help{line-height:1.7;margin-top:8px}
 /* V44.7: independent responsive candidate cards, avoid iPad Safari table layout collapse */
 .candidate-list{display:flex;flex-direction:column;gap:9px;margin-top:13px;min-width:0;width:100%}
@@ -7,7 +7,7 @@
 @media(max-width:1100px){.candidate-row{grid-template-columns:28px minmax(100px,1fr) 85px 65px 55px 55px;gap:7px}.candidate-row .c-first,.candidate-row .c-proof{grid-column:span 3}.candidate-extra{grid-column:1/-1}}
 @media(max-width:650px){.candidate-row{grid-template-columns:25px minmax(105px,1fr) 85px 68px;gap:6px}.candidate-row .c-first,.candidate-row .c-proof{grid-column:span 2}.candidate-extra{grid-column:1/-1}}
 .delay-ok{color:#83e9a8;white-space:nowrap}.delay-warn{color:#ffd46d;white-space:nowrap}.delay-bad{color:#ff8383;white-space:nowrap}[hidden]{display:none!important}</style></head><body><div class="wrap">
-<header class="head"><div><h1>🚀 AQ V46.10 · 沪深自选兼容版</h1><div class="muted">盘中强势发现 · 候选持续追踪 · 次日接力研究｜重点关注独立刷新｜行情过期禁止买入</div></div><div class="controls"><button id="start">启动 / 继续扫描</button><button id="pause">暂停扫描</button><label><input type="checkbox" id="autorefresh" checked> 重点关注每5秒独立尝试刷新</label></div></header>
+<header class="head"><div><h1>🚀 AQ V46.11 · 推荐链路修复版</h1><div class="muted">盘中强势发现 · 候选持续追踪 · 次日接力研究｜重点关注独立刷新｜行情过期禁止买入</div></div><div class="controls"><button id="start">启动 / 继续扫描</button><button id="pause">暂停扫描</button><label><input type="checkbox" id="autorefresh" checked> 重点关注每5秒独立尝试刷新</label></div></header>
 <section class="box notice"><b>⚠️ 研究测试版，非已验证的买入系统。</b> V46.9暂停复盘展示与轮询，保留风险防守及D1写入；不等于正式市场择时模型。V46.7新增基于公开报价累计成交量/成交额增量的盘中量价观察（至少3个有效时间戳）；不等于主力净流入、逐笔主动买卖或龙虎榜席位。未接入正式龙虎榜数据；不虚构昨日龙虎榜。V45.7自选、价格确认TOP3、分级雷达TOP30共用候选数据；启动分仍为价格快照研究分（0–100），并在TOP30中直接显示预警等级；预警仅依据报价与价格轨迹，绝非买入信号。TOP3仅代表至少3次独立交易所时间戳（相邻至少5秒）的价格走势确认，不代表量价或资金承接已核验；涨停仍保留于搜索与重点关注；接力分仍未经验证，不代表次日涨跌。V44评分已取消机械高开及涨幅扣分；缺少连续行情时评分仅供观察。提前预警不代表未来上涨；行情有延迟，A股T+1存在隔夜风险。板块实时数据尚未接入可靠来源时显示“待接入”，不虚构板块涨幅、排名或资金流。</section>
 <section class="box"><div id="perfstatus" class="muted">腾讯主行情 · 等待性能采样</div><button id="sourceprobe">测试东方财富 / 新浪接口</button><div id="probestatus" class="muted small">备用源仅诊断，不参与评分或报价。</div></section><section class="grid"><div class="box"><div class="muted">扫描状态</div><div class="stat" id="status">待启动</div></div><div class="box"><div class="muted">有效股票 / 扫描进度</div><div class="stat" id="progress">0 / 0</div></div><div class="box"><div class="muted">榜单更新时间</div><div class="stat" id="ranktime">—</div></div><div class="box"><div class="muted">报价刷新 / 失败</div><div class="stat" id="quotetime">—</div></div></section>
 <section class="box" hidden><div class="head"><h2>⭐ 我的自选股 · 不限数量 · 独立监测</h2><div class="controls"><input id="watchcode" maxlength="8" placeholder="股票/ETF或sh000001"><button id="watchadd">添加自选</button><button id="watchrefresh">立即刷新</button></div></div><div class="muted small" id="watchstatus">自选数量不限；交易时段分批刷新报价，数量越多完整轮询越久。数据保存在当前浏览器；关闭网页后不监控。</div><div class="tablewrap"><table><thead><tr><th>股票</th><th>现价</th><th>涨跌幅</th><th>启动/接力</th><th>模式</th><th>成本(元)</th><th>股数</th><th>盈亏(元/%)</th><th>警戒价</th><th>成交活跃度观察</th><th>行情时间</th><th>状态/条件提醒</th><th>操作</th></tr></thead><tbody id="watchrows"><tr><td colspan="13">暂无自选股</td></tr></tbody></table></div><p class="muted small help">持仓成本、股数和警戒价由你自行填写；警戒价触发仅为页面内条件提示，不是自动减仓指令。行情可能延迟，关闭页面后不监控、不推送。所有资料仅存于当前浏览器。</p></section>
@@ -50,7 +50,8 @@ function firstSeenLabel(x){
  return o.quoteTime.slice(8,10)+':'+o.quoteTime.slice(10,12)+' / '+o.pct.toFixed(2)+'%';
 }
 let manualScanning=false,segmentFailures=0,lastSegmentError='',scanStartedAt=0,lastQuoteWarning="",scanCompleted=false,cycle=0,crSnapshots=new Map(),pool=new Map(),list=[],mode='trade',segments=0,index=0,busy=false,paused=false,fail=0,rankingAt=0,quoteAt=0,historyEnabled=false,rankSeen=new Map();
-function bj(){const x=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).map(z=>[z.type,z.value]));return {date:`${x.year}-${x.month}-${x.day}`,minute:+x.hour*60+(+x.minute),weekday:x.weekday}};
+let bjCache=null,bjCacheMinute=-1;
+function bj(){const minuteKey=Math.floor(Date.now()/60000);if(bjCache&&bjCacheMinute===minuteKey)return bjCache;const x=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).map(z=>[z.type,z.value]));bjCacheMinute=minuteKey;return bjCache={date:`${x.year}-${x.month}-${x.day}`,minute:+x.hour*60+(+x.minute),weekday:x.weekday}};
 function active(){const t=bj();const minutes=t.minute;return !['Sat','Sun'].includes(t.weekday)&&((minutes>=570&&minutes<690)||(minutes>=780&&minutes<900))}
 // V46.7: only cumulative public-quote volume/amount increments; NOT order flow, seats or net inflow.
 function crText(x){
@@ -110,8 +111,9 @@ function trackAcceleration(x){
  accelSamples.set(x.code,h.filter(v=>t-v.t<=600000).slice(-12));
 }
 function accelLabel(x){const a=acceleration(x);if(!quoteFresh(x))return '—';if(!a)return '⚪ 待采样';const st=signalState(x);if(a.velocity>0&&a.acceleration>.08)return x.pct<0||x.position<.55?'🟡 反弹加速':'🚀 向上加速';return a.velocity>0?'🟡 上行':'🔴 转弱';}
-function evidenceLabel(x){if(!quoteFresh(x))return '⚪ 行情待核';const h=signalState(x).hist||[];if(h.length<3)return '🟡 预警观察（'+Math.min(h.length,3)+'/3；需不同交易所时间戳；未确认）';if(!signalState(x).stage.startsWith('🟢')&&h.length>=3){const q=h.slice(-3);if(q[1].at-q[0].at<5000||q[2].at-q[1].at<5000)return '🟠 3/3报价已采集·时间间隔不足（至少各5秒）';}const first=h[0],last=h[h.length-1];const delta=(last.price/first.price-1)*100;const up=h.slice(-3).every((v,i,arr)=>i===0||v.price>=arr[i-1].price);const draw=x.high>0?(x.high-x.price)/x.high*100:0;return (up?'↗连续':'↕反复')+' '+(delta>=0?'+':'')+delta.toFixed(2)+'% / 回撤'+draw.toFixed(2)+'%';}
+function evidenceLabel(x){if(!quoteFresh(x))return '⚪ 行情待核';const h=signalState(x).hist||[];if(h.length<3)return '🟡 预警观察（'+Math.min(h.length,3)+'/3；需不同交易所时间戳；未确认）';if(!signalState(x).stage.startsWith('🟢')&&h.length>=3){const q=spacedThree(h);if(q.length<3)return '🟠 3/3报价已采集·时间间隔不足（至少各5秒）';}const first=h[0],last=h[h.length-1];const delta=(last.price/first.price-1)*100;const up=spacedThree(h).every((v,i,arr)=>i===0||v.price>=arr[i-1].price);const draw=x.high>0?(x.high-x.price)/x.high*100:0;return (up?'↗连续':'↕反复')+' '+(delta>=0?'+':'')+delta.toFixed(2)+'% / 回撤'+draw.toFixed(2)+'%';}
 function signalState(x){return signalStates.get(x.code)||{stage:'⚪ 数据不足',stability:null,at:'—',reason:'等待不同时间戳的有效报价'};}
+function spacedThree(h){const out=[];for(let i=h.length-1;i>=0;i--){const v=h[i];if(!out.length||out[0].at-v.at>=5000)out.unshift(v);if(out.length===3)break;}return out;}
 function observeSignal(x){
  trackAcceleration(x);
  if(!x||!Number.isFinite(x.price)||!/^20\d{12}$/.test(String(x.quoteTime||'')))return;
@@ -122,12 +124,12 @@ function observeSignal(x){
  const a=hist.slice(-8),first=a[0],last=a[a.length-1];
  // V46.6: three distinct exchange timestamps, at least 5 seconds apart each.
  // A provider that updates only once per minute cannot be made to confirm in 10 seconds.
- const recentThree=a.slice(-3);
+ const recentThree=spacedThree(hist);
  const hasEnough=recentThree.length===3&&recentThree[1].at-recentThree[0].at>=5000&&recentThree[2].at-recentThree[1].at>=5000&&new Set(recentThree.map(v=>v.stamp)).size===3;
  const high=Number.isFinite(x.high)?x.high:x.price,draw=high>0?(high-x.price)/high*100:0;
  const rising=hasEnough&&last.price>=first.price*1.003&&last.pct>=first.pct+.25;
  const accel=acceleration(x);
- const lastThree=a.slice(-3),upSteps=lastThree.length===3&&lastThree[1].price>=lastThree[0].price&&lastThree[2].price>=lastThree[1].price;
+ const lastThree=recentThree,upSteps=lastThree.length===3&&lastThree[1].price>=lastThree[0].price&&lastThree[2].price>=lastThree[1].price;
  const breakout=!x.lockedLimitCandidate&&hasEnough&&rising&&upSteps&&x.pct>=1.5&&x.position>=.7&&draw<.8; // 3个独立交易所时间戳已证明价格连续性；加速度属于额外参考，不能重复阻断确认
  const stale=stamp.slice(0,8)!==bj().date.replace(/-/g,'')||!Number.isFinite(sampleAt)||now-sampleAt>120000||sampleAt-now>60000;
  const failing=(hasEnough&&last.price<first.price*.985&&x.position<.4)||(draw>=3&&x.position<.35);
@@ -196,8 +198,10 @@ function opportunityScore(x){
  // Score used only WITHIN a status tier, not a probability or buy signal.
  return x.startScore*.23+x.relayScore*.17+x.position*15+motion-risk;
 }
+function radarEligible(x){return !x.watchOnly&&valid(x)&&quoteFresh(x)&&Number.isFinite(x.position)&&Number.isFinite(x.startScore)&&Number.isFinite(x.relayScore);}
 function sorted(m){
- const a=[...pool.values()].filter(x=>valid(x)&&quoteFresh(x));
+ if(!active())return [];
+ const a=[...pool.values()].filter(radarEligible);
  if(m==='trade'){
    // Show emerging stocks even below old 70/65 thresholds; rank confirmed first,
    // then watch candidates, then unconfirmed; do not let completed limit boards dominate.
@@ -285,8 +289,8 @@ function computeMarketGuard(){
  return {state:'OBSERVE',label:'🟡 样本未触发普跌阈值 · 仍需独立验证',n,up,down,ratio};
 }
 function decision(x){if(x?.watchOnly)return '⚪ 仅行情观察';if(x?.lockedLimitCandidate)return '🔒 不买·一字板难成交';if(x?.limitState==='接近涨停')return '🔒 已近涨停·成交待核';if(!quoteFresh(x))return '🔴 不买·行情过期';if(!active())return '⚪ 非交易时段';const guard=marketGuard();if(guard.state==='UNKNOWN'||guard.state==='DEFENSE')return '🔴 不买·市场数据不足/普跌';if(guard.state==='CAUTION')return '🟠 弱市观察·不追';const st=signalState(x).stage;if(st.startsWith('🔴')||st.startsWith('🟠'))return '🔴 不买';if(st.startsWith('🟢')&&x.startScore>=75&&x.relayScore>=70)return '🟡 走势确认·量价待核';return '🟡 观察·不追';}
-function rowHtml(x,i,withRemove=false){const ok=x&&valid(x),code=x?.code||'',fresh=quoteFresh(x);return `<tr><td>${i+1}</td><td><b>${esc(x?.name||(withRemove&&focusMissing.has(code)?'未返回有效行情':'待加载'))}</b>${x?.lockedLimitCandidate?' <span title="仅根据报价快照识别，非全天封板证据">🔒一字板候选</span>':''}<br><span class="muted small">${esc(code)}</span></td><td class="price" data-price="${esc(code)}">${ok?x.price.toFixed(x.watchOnly&&/^[15]/.test(code)?3:2):'—'}</td><td class="${ok?(x.pct>=0?'up':'down'):''}" data-pct="${esc(code)}">${ok?x.pct.toFixed(2)+'%':'—'}</td><td>${scoreCell(x,'startScore',withRemove)}</td><td>${scoreCell(x,'relayScore',withRemove)}</td><td class="small">${esc(firstSeenLabel(x))}</td><td class="small">${esc(evidenceLabel(x))}</td><td>${accelLabel(x)}</td><td>${acceptance(x)}</td><td>${fresh?esc(opportunityState(x).label+' / '+overnightRisk(x).label):'⚪ 行情过期/未加载'}</td><td>${decision(x)}</td><td class="small" data-time="${esc(code)}">${ok?esc(String(x.quoteTime).slice(0,8)):'—'}</td>${withRemove?`<td data-quote-stamp="${esc(ok?String(x.quoteTime):'')}" class="small">${quoteDelayInfo(ok?x.quoteTime:null).label}</td><td><button data-focus-remove="${esc(code)}">移除</button></td>`:''}</tr>`;}
-function candidateCard(x,i){const ok=x&&valid(x),fresh=quoteFresh(x),st=fresh?opportunityState(x).label:'⚪ 行情过期/未加载';const fields=[['预警等级',warningLevel(x)],['首次观察',firstSeenLabel(x)],['启动证据',evidenceLabel(x)],['加速度',accelLabel(x)],['承接',acceptance(x)],['盘中量价',crText(x)],['隔夜风险',overnightRisk(x).label+'（'+overnightRisk(x).reason+'）'],['阶段',st],['建议',decision(x)],['行情时间',ok?String(x.quoteTime):'—']];return `<div class="candidate-row"><div class="c-val">${i+1}</div><div><div class="c-name">${esc(x.name||'待加载')}</div><div class="muted small">${esc(x.code||'')}</div></div><div><span class="c-label">现价</span><span class="c-price">${ok?x.price.toFixed(x.watchOnly&&/^[15]/.test(code)?3:2):'—'}</span></div><div><span class="c-label">涨幅</span><span class="c-val ${ok?(x.pct>=0?'up':'down'):''}">${ok?x.pct.toFixed(2)+'%':'—'}</span></div><div><span class="c-label">启动分</span><span class="c-val">${scoreCell(x,'startScore')}</span></div><div><span class="c-label">次日分</span><span class="c-val">${scoreCell(x,'relayScore')}</span></div><div class="c-first"><span class="c-label">首次观察</span><span class="c-val">${esc(firstSeenLabel(x))}</span></div><div class="c-proof"><span class="c-label">启动证据</span><span class="c-val">${esc(evidenceLabel(x))}</span></div><div class="candidate-extra">${fields.filter(([k])=>k!=='首次观察'&&k!=='启动证据').map(([k,v])=>`<span><b>${k}：</b>${esc(v)}</span>`).join('')}</div></div>`;}
+function rowHtml(x,i,withRemove=false){const ok=x&&valid(x),code=x?.code||'',fresh=quoteFresh(x);return `<tr><td>${i+1}</td><td><b>${esc(x?.name||(withRemove&&focusMissing.has(code)?'未返回有效行情':'待加载'))}</b>${x?.lockedLimitCandidate?' <span title="仅根据报价快照识别，非全天封板证据">🔒一字板候选</span>':''}<br><span class="muted small">${esc(code)}</span></td><td class="price" data-price="${esc(code)}">${ok?x.price.toFixed(x.watchOnly&&/^[15]/.test(x.code)?3:2):'—'}</td><td class="${ok?(x.pct>=0?'up':'down'):''}" data-pct="${esc(code)}">${ok?x.pct.toFixed(2)+'%':'—'}</td><td>${scoreCell(x,'startScore',withRemove)}</td><td>${scoreCell(x,'relayScore',withRemove)}</td><td class="small">${esc(firstSeenLabel(x))}</td><td class="small">${esc(evidenceLabel(x))}</td><td>${accelLabel(x)}</td><td>${acceptance(x)}</td><td>${fresh?esc(opportunityState(x).label+' / '+overnightRisk(x).label):'⚪ 行情过期/未加载'}</td><td>${decision(x)}</td><td class="small" data-time="${esc(code)}">${ok?esc(String(x.quoteTime).slice(0,8)):'—'}</td>${withRemove?`<td data-quote-stamp="${esc(ok?String(x.quoteTime):'')}" class="small">${quoteDelayInfo(ok?x.quoteTime:null).label}</td><td><button data-focus-remove="${esc(code)}">移除</button></td>`:''}</tr>`;}
+function candidateCard(x,i){const ok=x&&valid(x),fresh=quoteFresh(x),st=fresh?opportunityState(x).label:'⚪ 行情过期/未加载';const fields=[['预警等级',warningLevel(x)],['首次观察',firstSeenLabel(x)],['启动证据',evidenceLabel(x)],['加速度',accelLabel(x)],['承接',acceptance(x)],['盘中量价',crText(x)],['隔夜风险',overnightRisk(x).label+'（'+overnightRisk(x).reason+'）'],['阶段',st],['建议',decision(x)],['行情时间',ok?String(x.quoteTime):'—']];return `<div class="candidate-row"><div class="c-val">${i+1}</div><div><div class="c-name">${esc(x.name||'待加载')}</div><div class="muted small">${esc(x.code||'')}</div></div><div><span class="c-label">现价</span><span class="c-price">${ok?x.price.toFixed(x.watchOnly&&/^[15]/.test(x.code)?3:2):'—'}</span></div><div><span class="c-label">涨幅</span><span class="c-val ${ok?(x.pct>=0?'up':'down'):''}">${ok?x.pct.toFixed(2)+'%':'—'}</span></div><div><span class="c-label">启动分</span><span class="c-val">${scoreCell(x,'startScore')}</span></div><div><span class="c-label">次日分</span><span class="c-val">${scoreCell(x,'relayScore')}</span></div><div class="c-first"><span class="c-label">首次观察</span><span class="c-val">${esc(firstSeenLabel(x))}</span></div><div class="c-proof"><span class="c-label">启动证据</span><span class="c-val">${esc(evidenceLabel(x))}</span></div><div class="candidate-extra">${fields.filter(([k])=>k!=='首次观察'&&k!=='启动证据').map(([k,v])=>`<span><b>${k}：</b>${esc(v)}</span>`).join('')}</div></div>`;}
 // V45.6: the warning board is a promoted view of the SAME TOP30 radar list.
 // It never starts a separate market-wide request, and never introduces an unscanned stock.
 function warningAssessment(x){
@@ -315,10 +319,10 @@ function warningLevel(x){
 function confirmedTop3(){
  if(!active())return [];
  return [...pool.values()].filter(x=>{
-  if(!valid(x)||!quoteFresh(x)||x.lockedLimitCandidate||x.limitState==='接近涨停')return false;
+  if(!radarEligible(x)||x.lockedLimitCandidate||x.limitState==='接近涨停')return false;
   const st=signalState(x), h=st.hist||[];
   if(!st.stage.startsWith('🟢')||h.length<3)return false; // 加速度窗口不足时不重复否决已由真实报价验证的连续上涨
-  const last3=h.slice(-3);if(last3.length<3||new Set(last3.map(v=>v.stamp)).size<3||last3[1].at-last3[0].at<5000||last3[2].at-last3[1].at<5000||h[h.length-1].price<h[0].price*1.003)return false;
+  const last3=spacedThree(h);if(last3.length<3||new Set(last3.map(v=>v.stamp)).size<3||last3[1].at-last3[0].at<5000||last3[2].at-last3[1].at<5000||h[h.length-1].price<h[0].price*1.003)return false;
   const draw=x.high>0?(x.high-x.price)/x.high*100:Infinity;
   return overnightRisk(x).level!=='HIGH'&&x.pct>=1.5&&x.pct<=9.5&&x.position>=.7&&draw<.8&&x.startScore>=70&&x.relayScore>=65;
  }).sort((a,b)=>opportunityScore(b)-opportunityScore(a)).slice(0,3);
@@ -332,7 +336,8 @@ function top3Diagnostics(){
 }
 function patchRows(el,html){const t=el.cloneNode(false);t.innerHTML=html;const nodes=Array.from(t.children);for(let i=0;i<nodes.length;i++){const old=el.children[i];if(!old)el.appendChild(nodes[i]);else if(!old.isEqualNode(nodes[i]))old.replaceWith(nodes[i]);}while(el.children.length>nodes.length)el.lastElementChild.remove();}
 let lastSavedPicks="",lastSavedAt=0;
-function refreshVisible(){if(document.hidden||!active())return;const t=performance.now();list=list.map(x=>pool.get(x.code)||x);const query=$('search').value.trim();if(!query)patchRows($('rows'),list.length?list.map((x,i)=>candidateCard(x,i)).join(''):$('rows').innerHTML);const g=marketGuard();$('marketGuardStatus').textContent=g.label+'｜有效涨跌样本 '+g.n+' 只，上涨 '+g.up+' / 下跌 '+g.down+'；上涨占比 '+(g.ratio*100).toFixed(1)+'%（扫描池统计）';const picks=renderTop3();const sig=picks.map(x=>x.code).join(",");if(picks.length&&(sig!==lastSavedPicks||Date.now()-lastSavedAt>=15000)){lastSavedPicks=sig;lastSavedAt=Date.now();saveHistory(picks)}if(!picks.length)lastSavedPicks="";$('perfstatus').textContent='腾讯主行情 · 页面候选更新 '+Math.round(performance.now()-t)+' ms · 排序约60秒 · 报价按实际时间戳';}
+function refreshVisible(){if(document.hidden||!active())return;const t=performance.now();list=list.map(x=>pool.get(x.code)||x).filter(radarEligible);if(!list.length){list=sorted(mode);}const query=$('search').value.trim();if(!query)patchRows($('rows'),list.length?list.map((x,i)=>candidateCard(x,i)).join(''):radarEmpty());const g=marketGuard();$('marketGuardStatus').textContent=g.label+'｜有效涨跌样本 '+g.n+' 只，上涨 '+g.up+' / 下跌 '+g.down+'；上涨占比 '+(g.ratio*100).toFixed(1)+'%（扫描池统计）';const picks=renderTop3();const sig=picks.map(x=>x.code).join(",");if(picks.length&&(sig!==lastSavedPicks||Date.now()-lastSavedAt>=15000)){lastSavedPicks=sig;lastSavedAt=Date.now();saveHistory(picks)}if(!picks.length)lastSavedPicks="";$('perfstatus').textContent='腾讯主行情 · 页面候选更新 '+Math.round(performance.now()-t)+' ms · 排序约60秒 · 报价按实际时间戳';}
+function radarEmpty(){const a=[...pool.values()].filter(radarEligible);return `<div class="muted">${a.length?`当前有效普通股 ${a.length} 只；未达到观察条件。上涨 ${a.filter(x=>x.pct>0).length} 只，位置不足 ${a.filter(x=>x.position<.4).length} 只，风险阶段 ${a.filter(x=>/^(🔴|🟠)/.test(signalState(x).stage)).length} 只。`:`当前无有效普通股报价；池内 ${pool.size} 只，请检查报价时间及接口。`}</div>`;}
 function render(){const guard=marketGuard();$('marketGuardStatus').textContent=guard.label+'｜有效涨跌样本 '+guard.n+' 只，上涨 '+guard.up+' / 下跌 '+guard.down+'；上涨占比 '+(guard.ratio*100).toFixed(1)+'%。仅为当前扫描池统计，非全市场官方数据。';const query=$('search').value.trim();const view=query?[...pool.values()].filter(x=>x.code.includes(query)||x.name.includes(query)).sort((a,b)=>opportunityState(a).tier-opportunityState(b).tier||opportunityScore(b)-opportunityScore(a)).slice(0,30):list;
 const freshCount=[...pool.values()].filter(x=>valid(x)&&quoteFresh(x)).length;
 const observeCount=view.filter(x=>x.pct<.5||x.position<.45).length;
@@ -392,18 +397,18 @@ async function segment(force=false){
    lastFullCoverage=cycleSegments.size===segments&&cycleFailed.size===0;
    scanCompleted=lastFullCoverage;
    $('status').textContent=lastFullCoverage?'✅ 整轮扫描完成':'⚠️ 本轮有失败段，结果仅为部分覆盖';
-   cycleSegments.clear();cycleFailed.clear();cycleValid.clear();scanStartedAt=Date.now();if(!rankingAt||Date.now()-rankingAt>=60000)rank();
+   cycleSegments.clear();cycleFailed.clear();cycleValid.clear();scanStartedAt=Date.now();if(!rankingAt||Date.now()-rankingAt>=60000||(!list.length&&active()&&Date.now()-rankingAt>=5000))rank();
   }
   $('progress').textContent=`当前轮 ${cycleSegments.size}/${segments}段已处理（失败${cycleFailed.size}段） · 累计有效代码 ${pool.size}只 · 已结束${cycle}轮`+(lastFullCoverage?' · 最近整轮完整':' · 最近整轮不完整/未完成');
   if(index!==0)$('status').textContent=(active()?'交易时段':'非交易时段·历史快照仅供研究')+` · 正在扫描第${index+1}/${segments}段`+(cycleFailed.size?' · 失败段 '+cycleFailed.size:'')+(lastSegmentError?' · '+lastSegmentError.slice(0,70):'');
-  if(!rankingAt||Date.now()-rankingAt>=60000)rank();
+  if(!rankingAt||Date.now()-rankingAt>=60000||(!list.length&&active()&&Date.now()-rankingAt>=5000))rank();
  }catch(e){
   fail++;segmentFailures++;lastSegmentError=String(e.message||e);
   $('status').textContent='⚠️ 第'+(current+1)+'段请求失败，已跳过；下一轮重试：'+lastSegmentError;
   if(segmentFailures>=1){
    // Transport failures must not stall all-market discovery; retry this segment in the next round.
    cycleFailed.add(current);cycleSegments.add(current);index=(current+1)%segments;segmentFailures=0;
-   if(index===0){cycle++;lastFullCoverage=false;scanCompleted=false;cycleSegments.clear();cycleFailed.clear();cycleValid.clear();scanStartedAt=Date.now();if(!rankingAt||Date.now()-rankingAt>=60000)rank();}
+   if(index===0){cycle++;lastFullCoverage=false;scanCompleted=false;cycleSegments.clear();cycleFailed.clear();cycleValid.clear();scanStartedAt=Date.now();if(!rankingAt||Date.now()-rankingAt>=60000||(!list.length&&active()&&Date.now()-rankingAt>=5000))rank();}
   }
  }finally{busy=false}
 }
@@ -464,7 +469,7 @@ async function quotes(){
   priorityCursor=batches.length?(start+n)%batches.length:0;priorityAt=Date.now();prioritySucceeded+=ok;priorityFailed+=failed;
   quoteAt=Date.now();
   // 价格和信号实时更新；排名每15秒重算，避免持续重排。
-  if(!rankingAt||Date.now()-rankingAt>=60000)rank(); // 仅按排名节奏重绘TOP30/TOP3，避免5秒全量DOM重建。
+  if(!rankingAt||Date.now()-rankingAt>=60000||(!list.length&&active()&&Date.now()-rankingAt>=5000))rank(); // 仅按排名节奏重绘TOP30/TOP3，避免5秒全量DOM重建。
   $('quotetime').textContent=new Date().toLocaleTimeString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})+` · 本次${ok}只有效 · 自选独立刷新 + 候选${n}/${batches.length}批 · 累计失败${priorityFailed}`+' · 稳定追踪'+candidateFollow.size+'只候选 · 按个股行情时间判断有效性';
  }finally{quoteBusy=false}
 }
