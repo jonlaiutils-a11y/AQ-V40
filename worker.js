@@ -1,7 +1,7 @@
 // AQ V40 P1.2: Tencent quote connectivity test. Not full-market or trade-ready.
 const LEGACY_CODES=['000001','000002','000063','000333','000651','000725','000807','000977','001309','002050','002156','002230','002371','002475','002594','002787','002916','300014','300059','300124','300209','300308','300750','300760','600000','600030','600036','600089','600111','600276','600309','600519','600584','600703','600745','600900','601012','601318','601398','601899','601888','603019','603083','603256','603986','688008','688041','688111','688981','000006','000009','000012','000021','000027','000039','000050','000066','000069','000100','000157','000166','000301','000338','000400','000401','000408','000413','000415','000423','000425','000426','000429','000488','000513','000528','000538','000543','000568','000596','000625','000629','000630','000661','000683','000708','000709','000723','000728','000729','000733','000738','000768','000776','000778','000792','000799','000800','000858','000876','000883','000895','000898','000932','000933','000938','000960','000963','000983','001979','002001','002007','002008','002027','002028','002032','002049','002074','002085','002092','002129','002142','002179','002180','002202','002236','002241','002252','002271','002304','002311','002352','002384','002410','002415','002422','002459','002460','002466','002493','002555','002600','002601','002602','002603','002648','002714','002736','002812','002821','002841','002850','002920','002938','003816','300001','300003','300015','300017','300033','300073','300122','300136','300142','300274','300316','300347','300408','300418','300433','300450','300454','300476','300498','300502','300604','300628','300661','300672','300682','300759','300782','300803','300896','300919','300957','301029','301236','301269','301308','600010','600011','600015','600016','600019','600028','600031','600048','600050','600066','600085','600104','600109','600115','600150','600160','600176','600183','600196','600219','600233','600256','600332','600346','600362','600372','600383','600406','600415','600426','600436','600438','600460','600482','600487','600489','600498','600516','600522','600547','600570','600585','600588','600600','600660','600690','600741','600760','600795','600809','600837','600845','600875','600886','600893','600905','600918','600919','600926','600938','600941','600958','600989','600999','601006','601009','601021','601066','601088','601100','601111','601117','601127','601138','601166','601169','601186','601211','601225','601229','601288','601319','601328','601336','601360','601377','601390','601600','601601','601607','601618','601628','601633','601668','601669','601688','601696','601728','601766','601788','601800','601816','601818','601857','601868','601877','601881','601919','601939','601985','601988','601989','601995','601998','603005','603160','603259','603288','603369','603392','603444','603501','603606','603659','603799','603806','603833','605117','688012','688036','688072','688126','688169','688187','688223','688256','688271','688303','688390','688396','688472','688506','688599'];
 // Exhaustive candidate CODE SPACE, not an exchange-listed security master. Invalid/nonlisted codes are discarded by quote().
-const PREFIXES=['000','001','002','003','300','301','600','601','603','605','688','689','920'];
+const PREFIXES=['000','001','002','003','300','301','600','601','603','605','688','689'];
 const UNIVERSE=PREFIXES.flatMap(prefix=>Array.from({length:1000},(_,i)=>prefix+String(i).padStart(3,'0')));
 const SEGMENT_SIZE=400;
 function clamp(v,lo=0,hi=100){return Math.max(lo,Math.min(hi,v))}
@@ -16,9 +16,13 @@ function scoreItem(x){
 }
 const source='腾讯公开行情接口（非官方，可能限流或失效）';
 const num=v=>{if(v===undefined||v===null||v===''||v==='-')return null;const x=Number(v);return Number.isFinite(x)?x:null};
-const market=code=>/^92/.test(code)?'bj':/^(6|9)/.test(code)?'sh':'sz';
-async function quote(codes,allowStale=false){
- const symbols=codes.map(c=>market(c)+c).join(',');
+const supported=c=>/^(?:[01356]\d{5}|(?:sh|sz)\d{6})$/.test(c)&&!/^((sh|sz)?(4|8|92))/.test(c);
+const market=code=>/^[56]/.test(code)?'sh':'sz';
+const symbol=c=>/^(sh|sz)/.test(c)?c:market(c)+c;
+async function quote(codes,allowStale=false,watchOnly=false){
+ codes=codes.filter(supported);if(!codes.length)return [];
+ const keys=new Map(codes.map(c=>[symbol(c),c]));
+ const symbols=[...keys.keys()].join(',');
  const url='https://qt.gtimg.cn/q='+symbols;
  const r=await fetch(url,{signal:AbortSignal.timeout(7000),headers:{'Accept':'*/*'}});
  if(!r.ok)throw Error('腾讯行情 HTTP '+r.status);
@@ -32,7 +36,10 @@ async function quote(codes,allowStale=false){
    const price=num(f[3]),prev=num(f[4]);if(!(price>0&&prev>0)||!/^\d{6}$/.test(code)||!f[1])continue;
    // Reject non-tradable, delisted, placeholder, and visibly stale quote records.
    const name=String(f[1]).trim();
-   if(/退市|退|\*ST|^ST|^PT|^N|^C/.test(name)||/^(000003|000004)$/.test(code))continue;
+   const key=keys.get(match[1]);if(!key)continue;
+   const special=/退市|退|\*ST|^ST|^PT|^N|^C/i.test(name)||/^(000003|000004)$/.test(code)||/^(5|15|16|18)/.test(code)||/^(sh|sz)/.test(key);
+   if(special&&!watchOnly)continue;
+   if(special){const qt=String(f[30]||'');if(!/^20\d{12}$/.test(qt))continue;items.push({code:key,name,price,pct:num(f[32])??(price/prev-1)*100,quoteTime:qt,volume:num(f[6]),amount:num(f[37]),watchOnly:true,risk:['仅行情观察']});continue;}
    const qt=String(f[30]||'');
    if(!/^20\d{12}$/.test(qt))continue;
    const quoteDate=qt.slice(0,8),todayCN=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/-/g,'');
@@ -247,20 +254,20 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const results=await Promise.all(tests.map(async ([name,url])=>{const t=Date.now();try{const r=await fetch(url,{signal:AbortSignal.timeout(4500),headers:{Referer:name==='新浪'?'https://finance.sina.com.cn/':'https://quote.eastmoney.com/'}});if(!r.ok)throw Error('HTTP '+r.status);let detail;if(name==='东方财富'){const d=(await r.json()).data;if(!d||d.f57!=='600519'||!(Number(d.f43)>0))throw Error('缺少有效样本');detail='600519 报价时间字段 '+String(d.f86??'缺失');}else{const raw=new TextDecoder('gb18030').decode(await r.arrayBuffer());const m=raw.match(/hq_str_sh600519="([^"]+)"/);const f=m?.[1].split(',');if(!f||!(Number(f[3])>0))throw Error('缺少有效样本');detail='600519 '+String(f[30]??'')+' '+String(f[31]??'');}return {name,ok:true,ms:Date.now()-t,detail};}catch(e){return {name,ok:false,ms:Date.now()-t,detail:String(e.message||e)};}}));return json({results});
  }
  if(u.pathname==='/api/quotes'){
-  const codes=[...new Set((u.searchParams.get('codes')||'').split(',').filter(c=>/^\d{6}$/.test(c)))].slice(0,50);
+  const codes=[...new Set((u.searchParams.get('codes')||'').split(',').filter(supported))].slice(0,50);
   if(!codes.length)return json({error:'请提供1—50个6位代码'},400);
   const chunks=[];for(let i=0;i<codes.length;i+=25)chunks.push(codes.slice(i,i+25));
   // A failed upstream batch gets one smaller-chunk retry; preserve partial success.
   const result=await Promise.allSettled(chunks.map(async c=>{
-   try{return await quote(c,true)}catch(e){
+   try{return await quote(c,true,u.searchParams.get('watch')==='1')}catch(e){
     if(c.length<=8)throw e;
     const mid=Math.ceil(c.length/2);
-    const retry=await Promise.allSettled([quote(c.slice(0,mid),true),quote(c.slice(mid),true)]);
+    const retry=await Promise.allSettled([quote(c.slice(0,mid),true,u.searchParams.get('watch')==='1'),quote(c.slice(mid),true,u.searchParams.get('watch')==='1')]);
     if(retry.every(v=>v.status==='rejected'))throw e;
     return retry.flatMap(v=>v.status==='fulfilled'?v.value:[]);
    }
   }));
-  const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(scoreItem);
+  const items=result.flatMap(r=>r.status==='fulfilled'?r.value:[]).map(x=>x.watchOnly?x:scoreItem(x));
   return json({items,requested:codes.length,received:items.length,failedBatches:result.filter(r=>r.status==='rejected').length,fetchTime:new Date().toISOString(),source},result.every(r=>r.status==='rejected')?503:200);
  }
  if(u.pathname==='/api/diagnostics')return json({version:'46.0',cr:'unavailable: no licensed minute/tick data',nextDayProbability:'unavailable: not backtested',scoreVersion:'V44.0',scoreCalibration:'uncalibrated',backgroundScan:false,persistence:!!env.DB,quoteSource:source});
