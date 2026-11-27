@@ -242,6 +242,10 @@ export default {async scheduled(event,env,ctx){ctx.waitUntil(auditTracked(env).c
   const items=[...new Map(all.map(x=>[x.code,x])).values()].map(scoreItem);
   return json({index,segments,requested:codes.length,received:items.length,failedBatches:errors.length,recoveredChunks:recovered,attemptedChunks:attempted,errors,elapsedMs:Date.now()-started,snapshotOnly:!liveSession,items,timestamp:new Date().toISOString(),source,complete:errors.length===0},errors.length?206:200);
  }
+ if(u.pathname==='/api/source-probe'){
+  const tests=[['东方财富','https://push2.eastmoney.com/api/qt/stock/get?secid=1.600519&fields=f43,f57,f58,f86'],['新浪','https://hq.sinajs.cn/list=sh600519']];
+  const results=await Promise.all(tests.map(async ([name,url])=>{const t=Date.now();try{const r=await fetch(url,{signal:AbortSignal.timeout(4500),headers:{Referer:name==='新浪'?'https://finance.sina.com.cn/':'https://quote.eastmoney.com/'}});if(!r.ok)throw Error('HTTP '+r.status);let detail;if(name==='东方财富'){const d=(await r.json()).data;if(!d||d.f57!=='600519'||!(Number(d.f43)>0))throw Error('缺少有效样本');detail='600519 报价时间字段 '+String(d.f86??'缺失');}else{const raw=new TextDecoder('gb18030').decode(await r.arrayBuffer());const m=raw.match(/hq_str_sh600519="([^"]+)"/);const f=m?.[1].split(',');if(!f||!(Number(f[3])>0))throw Error('缺少有效样本');detail='600519 '+String(f[30]??'')+' '+String(f[31]??'');}return {name,ok:true,ms:Date.now()-t,detail};}catch(e){return {name,ok:false,ms:Date.now()-t,detail:String(e.message||e)};}}));return json({results});
+ }
  if(u.pathname==='/api/quotes'){
   const codes=[...new Set((u.searchParams.get('codes')||'').split(',').filter(c=>/^\d{6}$/.test(c)))].slice(0,50);
   if(!codes.length)return json({error:'请提供1—50个6位代码'},400);
